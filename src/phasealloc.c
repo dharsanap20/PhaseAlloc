@@ -1,4 +1,4 @@
-#include "phasealloc.h"
+#include "../include/phasealloc.h"
 #include <stdlib.h>
 
 PhaseArena phase_arena_create(size_t capacity) 
