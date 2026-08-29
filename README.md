@@ -31,12 +31,12 @@ When memory is requested, PhaseAlloc returns a pointer to the current offset and
 
 Conceptually:
 
-Arena
-┌──────────────────────────────────────────┐
-│ Used Memory │ Available Memory           │
-└──────────────────────────────────────────┘
-              ↑
-            offset
+    Arena
+    ┌──────────────────────────────────────────┐
+    │ Used Memory │ Available Memory           │
+    └──────────────────────────────────────────┘
+                  ↑
+                offset
 
 When the arena is reset, the offset returns to zero, allowing the memory region to be reused.
 
@@ -55,18 +55,18 @@ The underlying memory is not released until `phase_arena_destroy()` is called.
 
 ## Project Structure
 
-PhaseAlloc/
-├── include/
-│   └── phasealloc.h
-├── src/
-│   └── phasealloc.c
-├── tests/
-│   └── test_basic.c
-├── examples/
-│   └── basic.c
-├── README.md
-├── LICENSE
-└── .gitignore
+    PhaseAlloc/
+    ├── include/
+    │   └── phasealloc.h
+    ├── src/
+    │   └── phasealloc.c
+    ├── tests/
+    │   └── test_basic.c
+    ├── examples/
+    │   └── basic.c
+    ├── README.md
+    ├── LICENSE
+    └── .gitignore
 
 ## API
 
@@ -140,27 +140,23 @@ PhaseAlloc includes a basic test suite covering:
 - Arena reset
 - Arena destruction
 
-The test program is located at:
-
-    tests/test_basic.c
+The test program is located at `tests/test_basic.c`.
 
 ## Example
 
-A basic usage example is located at:
-
-    examples/basic.c
+A basic usage example is located at `examples/basic.c`.
 
 It demonstrates the basic lifecycle of a PhaseAlloc arena:
 
-Create
-  ↓
-Allocate
-  ↓
-Use
-  ↓
-Reset
-  ↓
-Destroy
+    Create
+      ↓
+    Allocate
+      ↓
+    Use
+      ↓
+    Reset
+      ↓
+    Destroy
 
 ## Design Goal
 
