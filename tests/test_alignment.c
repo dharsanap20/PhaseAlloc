@@ -5,21 +5,32 @@
 
 int main(void)
 {
-    PhaseArena arena = phase_arena_create(1024); // Create an arena with 1024 bytes
+    PhaseArena arena = phase_arena_create(1024);
 
     assert(arena.buffer != NULL);
 
-    void *memory = phase_arena_alloc(&arena, 1); // Allocate 1 byte of memory
+    // Test allocations of different sizes
+    void *first = phase_arena_alloc(&arena, 1);
+    void *second = phase_arena_alloc(&arena, 5);
+    void *third = phase_arena_alloc(&arena, 13);
+    void *fourth = phase_arena_alloc(&arena, 32);
 
-    assert(memory != NULL);
+    assert(first != NULL);
+    assert(second != NULL);
+    assert(third != NULL);
+    assert(fourth != NULL);
 
-    assert(((uintptr_t)memory % 8) == 0); // Check if the allocated memory is aligned to 8 bytes
+    // Check that every returned address is 8-byte aligned
+    assert((uintptr_t)first % 8 == 0);
+    assert((uintptr_t)second % 8 == 0);
+    assert((uintptr_t)third % 8 == 0);
+    assert((uintptr_t)fourth % 8 == 0);
 
-    printf("[PASS] Memory allocation is aligned to 8 bytes.\n");
+    printf("[PASS] All allocations are 8-byte aligned.\n");
 
-    phase_arena_destroy(&arena); // Clean up the arena
+    phase_arena_destroy(&arena);
 
-    printf("All alignment tests passed successfully!\n");
+    printf("Alignment tests passed!\n");
 
     return 0;
 }

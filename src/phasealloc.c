@@ -21,22 +21,34 @@ PhaseArena phase_arena_create(size_t capacity)
 
 void *phase_arena_alloc(PhaseArena *arena, size_t size) 
 {
-    if (!arena || !arena->buffer) 
+    if (!arena || !arena->buffer || size == 0) 
     {
-        return NULL; // Invalid arena or uninitialized buffer
+        return NULL; // Return NULL if the arena is invalid or the requested size is zero
     }
 
-    size_t aligned_size = align_up(size, 8); // Align the requested size to 8 bytes for better memory alignment
+    uintptr_t current_address = (uintptr_t)(arena->buffer + arena->offset);
+
+    uintptr_t aligned_address = align_up(current_address, 8); // Align the address to the next multiple of 8
     
-    if (aligned_size > arena->capacity - arena->offset) 
+    size_t padding = aligned_address - current_address; // Calculate the padding needed for alignment
+
+    if (padding > arena->capacity - arena->offset) 
     {
-        return NULL; // Not enough space in the arena
+        return NULL; // Return NULL if there is not enough space for the padding
     }
 
-    void *memory = arena->buffer + arena->offset;
-    arena->offset += aligned_size;
+    if (size > arena->capacity - arena->offset - padding) 
+    {
+        return NULL; // Return NULL if there is not enough space for the requested size after padding
+    }
 
-    return memory;
+    arena->offset += padding; // Update the offset to account for the padding
+
+    void *memory = arena->buffer + arena->offset; // Calculate the address of the allocated memory
+
+    arena->offset += size; // Update the offset to account for the allocated size
+
+    return memory; // Return the pointer to the allocated memory
 }
 
 void phase_arena_reset(PhaseArena *arena) 
