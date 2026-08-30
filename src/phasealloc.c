@@ -1,6 +1,11 @@
 #include "../include/phasealloc.h"
 #include <stdlib.h>
 
+static size_t align_up(size_t size, size_t alignment) 
+{
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
 PhaseArena phase_arena_create(size_t capacity) 
 {
     PhaseArena arena = {0}; // Creates a arena of "PhaseArena" type and initializes it to zero
@@ -20,14 +25,16 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
     {
         return NULL; // Invalid arena or uninitialized buffer
     }
+
+    size_t aligned_size = align_up(size, 8); // Align the requested size to 8 bytes for better memory alignment
     
-    if (arena->offset + size > arena->capacity) 
+    if (aligned_size > arena->capacity - arena->offset) 
     {
         return NULL; // Not enough space in the arena
     }
 
     void *memory = arena->buffer + arena->offset;
-    arena->offset += size;
+    arena->offset += aligned_size;
 
     return memory;
 }
