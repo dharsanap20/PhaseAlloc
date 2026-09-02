@@ -1,11 +1,6 @@
 #include "../include/phasealloc.h"
 #include <stdlib.h>
 
-static size_t align_up(size_t size, size_t alignment) 
-{
-    return (size + alignment - 1) & ~(alignment - 1);
-}
-
 PhaseArena phase_arena_create(size_t capacity) 
 {
     PhaseArena arena = {0}; // Creates a arena of "PhaseArena" type and initializes it to zero
@@ -26,18 +21,31 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
         return NULL; // Return NULL if the arena is invalid or the requested size is zero
     }
 
+    if (arena->offset > arena->capacity) 
+    {
+        return NULL; // Return NULL if the current offset exceeds the arena's capacity
+    }
+
     uintptr_t current_address = (uintptr_t)(arena->buffer + arena->offset);
 
-    uintptr_t aligned_address = align_up(current_address, 8); // Align the address to the next multiple of 8
-    
-    size_t padding = aligned_address - current_address; // Calculate the padding needed for alignment
+    uintptr_t remainder = current_address % 8; // Calculate the remainder when dividing the current address by 8
+
+    size_t padding = 0;
+
+    if (remainder != 0) 
+    {
+        padding = 8 - remainder; // Calculate the required padding to align to the next multiple of 8
+    }
+
 
     if (padding > arena->capacity - arena->offset) 
     {
         return NULL; // Return NULL if there is not enough space for the padding
     }
 
-    if (size > arena->capacity - arena->offset - padding) 
+    size_t available_space = arena->capacity - arena->offset - padding;
+
+    if (size > available_space) 
     {
         return NULL; // Return NULL if there is not enough space for the requested size after padding
     }
