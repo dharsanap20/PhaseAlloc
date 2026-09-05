@@ -1,6 +1,31 @@
 #include "../include/phasealloc.h"
 #include "phasealloc_internal.h"
+#include <stdint.h>
 #include <stdlib.h>
+
+struct PhaseChunk *phase_chunk_create(size_t capacity)
+{
+    struct PhaseChunk *chunk = malloc(sizeof(struct PhaseChunk)); // Allocate memory for a new PhaseChunk structure
+
+    if (!chunk) 
+    {
+        return NULL; // Return NULL if memory allocation for the chunk structure fails
+    }
+
+    chunk->buffer = malloc(capacity); // Allocate memory for the chunk's buffer
+
+    if (!chunk->buffer) 
+    {
+        free(chunk); // Free the allocated chunk structure if buffer allocation fails
+        return NULL; // Return NULL if memory allocation for the buffer fails
+    }
+
+    chunk->capacity = capacity; // Set the capacity of the chunk
+    chunk->offset = 0; // Initialize the offset to 0, indicating no memory has been used yet
+    chunk->next = NULL; // Initialize the next pointer to NULL, indicating no next chunk
+
+    return chunk; // Return the pointer to the newly created PhaseChunk
+}
 
 PhaseArena phase_arena_create(size_t capacity) 
 {
