@@ -27,32 +27,61 @@ struct PhaseChunk *phase_chunk_create(size_t capacity)
     return chunk; // Return the pointer to the newly created PhaseChunk
 }
 
+struct PhaseChunk *phase_chunk_create_next (struct PhaseChunk *current_chunk, size_t capacity) 
+{
+    if (!current_chunk) 
+    {
+        return NULL; // Return NULL if the current chunk is NULL
+    }
+
+    struct PhaseChunk *new_chunk = phase_chunk_create(capacity); // Create a new chunk with the specified capacity
+
+    if (!new_chunk) 
+    {
+        return NULL; // Return NULL if the new chunk creation fails
+    }
+
+    current_chunk->next = new_chunk; // Link the new chunk to the current chunk's next pointer
+
+    return new_chunk; // Return the pointer to the newly created next chunk
+}
+
 PhaseArena phase_arena_create(size_t capacity) 
 {
     PhaseArena arena = {0}; // Creates a arena of "PhaseArena" type and initializes it to zero
-    arena.buffer = malloc(capacity);
-    if (arena.buffer)
+    
+    PhaseChunk *first_chunk = phase_chunk_create(capacity); // Create the first chunk with the requested capacity
+
+    if (!first_chunk) 
     {
-            arena.capacity = capacity;
-            arena.offset = 0;
+        return arena; // Return the empty arena if chunk creation fails
     }
+
+    arena.buffer = first_chunk->buffer; // Set the arena's buffer to the first chunk's buffer
+    arena.capacity = first_chunk->capacity; // Set the arena's capacity to the first chunk's capacity
+    arena.offset = first_chunk->offset; // Set the arena's offset to the first chunk's offset
+
+    arena.first_chunk = first_chunk; // Set the first chunk of the arena
+    arena.current_chunk = first_chunk; // Set the current chunk of the arena to the first chunk
 
     return arena;
 }
 
 void *phase_arena_alloc(PhaseArena *arena, size_t size) 
 {
-    if (!arena || !arena->buffer || size == 0) 
+    if (!arena || !arena->current_chunk || size == 0) 
     {
         return NULL; // Return NULL if the arena is invalid or the requested size is zero
     }
 
-    if (arena->offset > arena->capacity) 
+    PhaseChunk *chunk = arena->current_chunk; // Get the current chunk from the arena
+
+    if (chunk->offset > chunk->capacity) 
     {
         return NULL; // Return NULL if the current offset exceeds the arena's capacity
     }
 
-    uintptr_t current_address = (uintptr_t)(arena->buffer + arena->offset);
+    uintptr_t current_address = (uintptr_t)(chunk->buffer + chunk->offset);
 
     uintptr_t remainder = current_address % 8; // Calculate the remainder when dividing the current address by 8
 
@@ -63,26 +92,83 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
         padding = 8 - remainder; // Calculate the required padding to align to the next multiple of 8
     }
 
-
-    if (padding > arena->capacity - arena->offset) 
+    if (padding <= chunk->capacity - chunk->offset && size <= chunk->capacity - chunk->offset -padding) 
     {
-        return NULL; // Return NULL if there is not enough space for the padding
+        chunk->offset += padding; // Apply the padding to the chunk's offset
+
+        void *memory = chunk->buffer + chunk->offset; // Calculate the address of the allocated memory
+
+        chunk->offset += size; // Update the chunk's offset to reflect the allocated memory
+
+        arena->buffer = chunk->buffer; // Update the arena's buffer to the chunk's buffer
+        arena->capacity = chunk->capacity; // Update the arena's capacity to the chunk's capacity
+        arena->offset = chunk->offset; // Update the arena's offset to the chunk's offset
+
+        return memory; // Return the pointer to the allocated memory
+    } 
+
+    /*
+    * The current does not have enough space.
+    * Create a larger chunk
+    */
+
+    size_t new_capacity;
+
+    if (chunk->capacity > SIZE_MAX / 2) 
+    {
+        new_capacity = size; // If the current capacity is greater than half of SIZE_MAX, set the new capacity to the requested size
+    } 
+    else 
+    {
+        new_capacity = chunk->capacity * 2; // Otherwise, double the current capacity for the new chunk
     }
 
-    size_t available_space = arena->capacity - arena->offset - padding;
-
-    if (size > available_space) 
+    if (new_capacity < size) 
     {
-        return NULL; // Return NULL if there is not enough space for the requested size after padding
+        new_capacity = size; // Ensure the new capacity is at least as large as the requested size
     }
 
-    arena->offset += padding; // Update the offset to account for the padding
+    PhaseChunk *new_chunk = phase_chunk_create_next(chunk, new_capacity); // Create a new chunk with the new capacity
 
-    void *memory = arena->buffer + arena->offset; // Calculate the address of the allocated memory
+    if (!new_chunk) 
+    {
+        return NULL; // Return NULL if the new chunk creation fails
+    }
 
-    arena->offset += size; // Update the offset to account for the allocated size
+    arena->current_chunk = new_chunk; // Update the arena's current chunk to the new chunk
 
-    return memory; // Return the pointer to the allocated memory
+    uintptr_t new_address = (uintptr_t)new_chunk->buffer;
+
+    uintptr_t new_remainder = new_address % 8; // Calculate the remainder for the new chunk's address
+    
+    size_t new_padding = 0;
+
+    if (new_remainder != 0) 
+    {
+        new_padding = 8 - new_remainder; // Calculate the required padding for the new chunk
+    }
+
+    if (new_padding > new_chunk->capacity)
+    {
+        return NULL; // Return NULL if the required padding exceeds the new chunk's capacity
+    }
+
+    if (size > new_chunk->capacity - new_padding) 
+    {
+        return NULL; // Return NULL if the requested size exceeds the available space in the new chunk after padding
+    }
+
+    new_chunk->offset += new_padding; // Apply the padding to the new chunk's offset
+
+    void *memory = new_chunk->buffer + new_chunk->offset; // Calculate the address of the allocated memory in the new chunk
+
+    new_chunk->offset += size; // Update the new chunk's offset to reflect the allocated memory
+
+    arena->buffer = new_chunk->buffer; // Update the arena's buffer to the new chunk's buffer
+    arena->capacity = new_chunk->capacity; // Update the arena's capacity to the new chunk's capacity
+    arena->offset = new_chunk->offset; // Update the arena's offset to the new chunk's offset
+
+    return memory; // Return the pointer to the allocated memory in the new chunk
 }
 
 void phase_arena_reset(PhaseArena *arena) 
