@@ -30,7 +30,7 @@ int main(void)
 
     phase_arena_destroy(&arena);
 
-    printf("Alignment tests passed!\n");
+    printf("\nAlignment tests passed!\n");
 
     return 0;
 }

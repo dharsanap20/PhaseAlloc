@@ -173,22 +173,47 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
 
 void phase_arena_reset(PhaseArena *arena) 
 {
-    if (arena) 
+    if (!arena || !arena->first_chunk) 
     {
-        arena->offset = 0; // Reset the offset to 0, effectively "freeing" all allocated memory
+        return; // Return if the arena is invalid or has no first chunk
     }
+    
+    PhaseChunk *chunk = arena->first_chunk; // Start with the first chunk
+
+    while (chunk) 
+    {
+        chunk->offset = 0; // Reset the offset of each chunk to 0
+        chunk = chunk->next; // Move to the next chunk
+    }
+
+    arena->current_chunk = arena->first_chunk; // Reset the current chunk to the first chunk
+    arena->buffer = arena->first_chunk->buffer; // Reset the arena's buffer to the first chunk's buffer
+    arena->capacity = arena->first_chunk->capacity; // Reset the arena's capacity to the first chunk's capacity
+    arena->offset = 0; // Reset the arena's offset to 0
 }
 
 void phase_arena_destroy(PhaseArena *arena) 
 {
-    if (arena && arena->buffer) 
+    if (!arena || !arena->first_chunk) 
     {
-        free(arena->buffer); // Free the allocated memory for the arena
-        
-        arena->buffer = NULL; // Set the buffer pointer to NULL to avoid dangling pointer
-        arena->capacity = 0; // Reset capacity to 0
-        arena->offset = 0; // Reset offset to 0
+        return; // Return if the arena is invalid or has no first chunk
     }
+
+    PhaseChunk *chunk = arena->first_chunk; // Start with the first chunk
+
+    while (chunk) 
+    {
+        PhaseChunk *next_chunk = chunk->next; // Store the next chunk before freeing the current one
+        free(chunk->buffer); // Free the memory buffer of the current chunk
+        free(chunk); // Free the current chunk structure
+        chunk = next_chunk; // Move to the next chunk
+    }
+
+    arena->buffer = NULL; // Reset the arena's buffer to NULL
+    arena->capacity = 0; // Reset the arena's capacity to 0
+    arena->offset = 0; // Reset the arena's offset to 0
+    arena->first_chunk = NULL; // Reset the arena's first chunk to NULL
+    arena->current_chunk = NULL; // Reset the arena's current chunk to NULL
 }
     
 
