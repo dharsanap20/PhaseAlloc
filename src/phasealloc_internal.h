@@ -12,4 +12,6 @@ struct PhaseChunk
     struct PhaseChunk *next; 
 };
 
+struct PhaseChunk *phase_chunk_create(size_t capacity); // Function to create a PhaseChunk with a requested capacity
+
 #endif // PHASEALLOC_INTERNAL_H

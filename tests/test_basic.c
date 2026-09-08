@@ -34,12 +34,12 @@ int main(void)
 
     printf("[PASS] Memory written successfully.\n");
 
-    // 4. Test out-of-memory protection
-    void *too_big = phase_arena_alloc(&arena, 2000); // Request more memory than available
+    // 4. Test dynamic growth
+    void *larger_allocation = phase_arena_alloc(&arena, 2000); 
 
-    assert(too_big == NULL);
+    assert(larger_allocation != NULL);
 
-    printf("[PASS] Out-of-memory protection works correctly.\n");
+    printf("[PASS] Arena grows when allocation exceeds current capacity.\n");
 
     // 5. Reset the arena
     phase_arena_reset(&arena);

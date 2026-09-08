@@ -76,36 +76,49 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
 
     PhaseChunk *chunk = arena->current_chunk; // Get the current chunk from the arena
 
-    if (chunk->offset > chunk->capacity) 
+    while(chunk)
     {
+        if (chunk->offset > chunk->capacity) 
+        {
         return NULL; // Return NULL if the current offset exceeds the arena's capacity
+        }
+
+        uintptr_t current_address = (uintptr_t)(chunk->buffer + chunk->offset);
+
+        uintptr_t remainder = current_address % 8; // Calculate the remainder when dividing the current address by 8
+
+        size_t padding = 0;
+
+        if (remainder != 0) 
+        {
+            padding = 8 - remainder; // Calculate the required padding to align to the next multiple of 8
+        }
+        
+        if (padding <= chunk->capacity - chunk->offset && size <= chunk->capacity - chunk->offset -padding) 
+        {
+            chunk->offset += padding; // Apply the padding to the chunk's offset
+
+            void *memory = chunk->buffer + chunk->offset; // Calculate the address of the allocated memory
+
+            chunk->offset += size; // Update the chunk's offset to reflect the allocated memory
+
+            arena->current_chunk = chunk; // Update the arena's current chunk to the current chunk
+            arena->buffer = chunk->buffer; // Update the arena's buffer to the chunk's buffer
+            arena->capacity = chunk->capacity; // Update the arena's capacity to the chunk's capacity
+            arena->offset = chunk->offset; // Update the arena's offset to the chunk's offset
+
+            return memory; // Return the pointer to the allocated memory
+        }
+        
+        chunk = chunk->next; // Move to the next chunk if the current chunk does not have enough space
     }
 
-    uintptr_t current_address = (uintptr_t)(chunk->buffer + chunk->offset);
+    chunk = arena->first_chunk; // Reset to the first chunk if no suitable chunk was found
 
-    uintptr_t remainder = current_address % 8; // Calculate the remainder when dividing the current address by 8
-
-    size_t padding = 0;
-
-    if (remainder != 0) 
+    while (chunk->next) 
     {
-        padding = 8 - remainder; // Calculate the required padding to align to the next multiple of 8
+        chunk = chunk->next; // Traverse to the last chunk in the linked list
     }
-
-    if (padding <= chunk->capacity - chunk->offset && size <= chunk->capacity - chunk->offset -padding) 
-    {
-        chunk->offset += padding; // Apply the padding to the chunk's offset
-
-        void *memory = chunk->buffer + chunk->offset; // Calculate the address of the allocated memory
-
-        chunk->offset += size; // Update the chunk's offset to reflect the allocated memory
-
-        arena->buffer = chunk->buffer; // Update the arena's buffer to the chunk's buffer
-        arena->capacity = chunk->capacity; // Update the arena's capacity to the chunk's capacity
-        arena->offset = chunk->offset; // Update the arena's offset to the chunk's offset
-
-        return memory; // Return the pointer to the allocated memory
-    } 
 
     /*
     * The current does not have enough space.
@@ -135,8 +148,6 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
         return NULL; // Return NULL if the new chunk creation fails
     }
 
-    arena->current_chunk = new_chunk; // Update the arena's current chunk to the new chunk
-
     uintptr_t new_address = (uintptr_t)new_chunk->buffer;
 
     uintptr_t new_remainder = new_address % 8; // Calculate the remainder for the new chunk's address
@@ -164,6 +175,7 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
 
     new_chunk->offset += size; // Update the new chunk's offset to reflect the allocated memory
 
+    arena->current_chunk = new_chunk; // Update the arena's current chunk to the new chunk
     arena->buffer = new_chunk->buffer; // Update the arena's buffer to the new chunk's buffer
     arena->capacity = new_chunk->capacity; // Update the arena's capacity to the new chunk's capacity
     arena->offset = new_chunk->offset; // Update the arena's offset to the new chunk's offset

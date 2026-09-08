@@ -24,13 +24,13 @@ int main(void)
     {
         PhaseArena arena = phase_arena_create(64);
 
-        void *ptr = phase_arena_alloc(&arena, 128); // Request more memory than available
+        void *ptr = phase_arena_alloc(&arena, 128); 
 
-        assert(ptr == NULL);
+        assert(ptr != NULL);
 
         phase_arena_destroy(&arena);
 
-        printf("[PASS] Out-of-memory allocation handled correctly.\n");
+        printf("[PASS] Allocation larger than current chunk handled correctly.\n");
     }
 
     // 3. Exact-capacity allocation
@@ -42,13 +42,13 @@ int main(void)
         assert(ptr != NULL);
         assert(arena.offset == 64);
 
-        void *next_ptr = phase_arena_alloc(&arena, 1); // Request more memory after full allocation
+        void *next_ptr = phase_arena_alloc(&arena, 1); 
 
-        assert(next_ptr == NULL);
+        assert(next_ptr != NULL);
 
         phase_arena_destroy(&arena);
 
-        printf("[PASS] Exact-capacity allocation handled correctly.\n");
+        printf("[PASS] Exact-capacity allocation followed by growth handled correctly.\n");
     }
 
     // 4. Multiple allocations
