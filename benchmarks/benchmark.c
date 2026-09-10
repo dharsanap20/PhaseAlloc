@@ -48,6 +48,10 @@ int main(void)
     double total_allocation_time = 0.0;
     double total_free_time = 0.0;
 
+    double total_phase_allocation_time = 0.0;
+    double total_phase_reset_time = 0.0;
+
+    // malloc/free benchmark
     for (int iteration = 0; iteration < ITERATIONS; iteration++)
     {
         timer_start(&timer);
@@ -85,12 +89,71 @@ int main(void)
         total_free_time += free_time;
     }
 
+    PhaseArena arena = phase_arena_create(
+        ALLOCATION_COUNT * ALLOCATION_SIZE * 2
+    );
+
+    if (arena.buffer == NULL)
+    {
+        printf("Failed to create PhaseAlloc arena.\n");
+        free(pointers);
+        return 1;
+    }
+
+    // PhaseAlloc benchmark
+    for (int iteration = 0; iteration < ITERATIONS; iteration++)
+    {
+        timer_start(&timer);
+
+        for (int i = 0; i < ALLOCATION_COUNT; i++)
+        {
+            void *memory = phase_arena_alloc(&arena, ALLOCATION_SIZE);
+
+            if (memory == NULL)
+            {
+                printf("PhaseAlloc allocation failed at iteration %d, allocation %d.\n", iteration, i);
+
+                phase_arena_destroy(&arena);
+                free(pointers);
+
+                return 1;
+            }
+        }
+
+        double phase_allocation_time = timer_stop(&timer);
+        total_phase_allocation_time += phase_allocation_time;
+
+        timer_start(&timer);
+
+        phase_arena_reset(&arena);
+
+        double phase_reset_time = timer_stop(&timer);
+        total_phase_reset_time += phase_reset_time;
+    }
+
     double average_allocation_time = total_allocation_time / ITERATIONS;
     double average_free_time = total_free_time / ITERATIONS;
+
+    double average_phase_allocation_time = total_phase_allocation_time / ITERATIONS;
+    double average_phase_reset_time = total_phase_reset_time / ITERATIONS;
+
+    double malloc_total_time = average_allocation_time + average_free_time;
+
+    double phase_total_time = average_phase_allocation_time + average_phase_reset_time;
 
     printf("\nResults:\n");
     printf("Average malloc allocation time: %.6f seconds\n", average_allocation_time);
     printf("Average free reclamation time: %.6f seconds\n", average_free_time);
+
+    printf("\nPhaseAlloc:\n");
+    printf("Average PhaseAlloc allocation time: %.6f seconds\n", average_phase_allocation_time);
+    printf("Average PhaseAlloc reset time: %.6f seconds\n", average_phase_reset_time);
+    
+    printf("\nTotal workload time:\n");
+    printf("malloc/free: %.6f seconds\n", malloc_total_time);
+    printf("PhaseAlloc: %.6f seconds\n", phase_total_time);
+
+    phase_arena_destroy(&arena);
 
     free(pointers); // Free the array of pointers itself
 
