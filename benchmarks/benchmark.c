@@ -51,6 +51,9 @@ int main(void)
     double total_phase_allocation_time = 0.0;
     double total_phase_reset_time = 0.0;
 
+    unsigned long long malloc_checksum = 0;
+    unsigned long long phase_checksum = 0;
+
     // malloc/free benchmark
     for (int iteration = 0; iteration < ITERATIONS; iteration++)
     {
@@ -73,6 +76,9 @@ int main(void)
 
                 return 1;
             }
+
+            ((unsigned char *)pointers[i])[0] = (unsigned char)i;
+            malloc_checksum += ((unsigned char *)pointers[i])[0];
         }
 
         double allocation_time = timer_stop(&timer);
@@ -118,6 +124,9 @@ int main(void)
 
                 return 1;
             }
+
+            ((unsigned char *)memory)[0] = (unsigned char)i;
+            phase_checksum += ((unsigned char *)memory)[0];
         }
 
         double phase_allocation_time = timer_stop(&timer);
@@ -145,10 +154,12 @@ int main(void)
     printf("Average malloc allocation time: %.6f seconds\n", average_allocation_time);
     printf("Average free reclamation time: %.6f seconds\n", average_free_time);
 
+    printf("Malloc checksum: %llu\n", malloc_checksum);
     printf("\nPhaseAlloc:\n");
     printf("Average PhaseAlloc allocation time: %.6f seconds\n", average_phase_allocation_time);
     printf("Average PhaseAlloc reset time: %.6f seconds\n", average_phase_reset_time);
     
+    printf("PhaseAlloc checksum: %llu\n", phase_checksum);
     printf("\nTotal workload time:\n");
     printf("malloc/free: %.6f seconds\n", malloc_total_time);
     printf("PhaseAlloc: %.6f seconds\n", phase_total_time);
