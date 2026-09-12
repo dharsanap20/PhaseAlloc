@@ -3,7 +3,7 @@
 #include <windows.h>
 #include "../include/phasealloc.h"
 
-#define ALLOCATION_COUNT 100000 // Number of allocations to perform in the benchmark
+#define ALLOCATION_COUNT 1000 // Number of allocations to perform in the benchmark
 #define ALLOCATION_SIZE 32 // Size of each allocation in bytes
 #define ITERATIONS 10 // Number of iterations to run the benchmark
 
@@ -77,8 +77,15 @@ int main(void)
                 return 1;
             }
 
-            ((unsigned char *)pointers[i])[0] = (unsigned char)i;
-            malloc_checksum += ((unsigned char *)pointers[i])[0];
+            for (int j = 0; j < ALLOCATION_SIZE; j++)
+            {
+                ((unsigned char *)pointers[i])[j] = (unsigned char)(i + j);
+            }
+
+            for (int j = 0; j < ALLOCATION_SIZE; j++)
+            {
+                malloc_checksum += ((unsigned char*)pointers[i])[j];
+            }
         }
 
         double allocation_time = timer_stop(&timer);
@@ -125,8 +132,15 @@ int main(void)
                 return 1;
             }
 
-            ((unsigned char *)memory)[0] = (unsigned char)i;
-            phase_checksum += ((unsigned char *)memory)[0];
+            for (int j = 0; j < ALLOCATION_SIZE; j++)
+            {
+                ((unsigned char *)memory)[j] = (unsigned char)(i + j);
+            }
+
+            for (int j = 0; j < ALLOCATION_SIZE; j++)
+            {
+                phase_checksum += ((unsigned char *)memory)[j];
+            }
         }
 
         double phase_allocation_time = timer_stop(&timer);
