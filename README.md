@@ -29,7 +29,9 @@ For example, instead of:
 
 ```text
 allocate A → free A
+
 allocate B → free B
+
 allocate C → free C
 ```
 
@@ -92,7 +94,7 @@ Arena
 
 ┌────────────────────┬─────────────────────┐
 │    Used Memory     │   Available Memory  │
-│      200 bytes     │      824 bytes      │
+│      200 bytes     │     824 bytes       │
 └────────────────────┴─────────────────────┘
                      ↑
                    offset
@@ -181,7 +183,7 @@ When the current chunk does not have enough space, PhaseAlloc searches existing 
 
 If an existing chunk can satisfy the allocation, it is reused.
 
-If no existing chunk can satisfy the request, PhaseAlloc creates a new chunk.
+If no existing chunk can satisfy the allocation, PhaseAlloc creates a new chunk.
 
 ### Growth Strategy
 
@@ -213,10 +215,9 @@ If the requested allocation is larger than the calculated growth size, the new c
 For example:
 
 ```text
-Current chunk:       64 bytes
+Current chunk:        64 bytes
 Requested allocation: 1000 bytes
-
-New chunk:          1000+ bytes
+New chunk:           1000+ bytes
 ```
 
 This allows PhaseAlloc to handle allocations larger than its original capacity.
@@ -247,6 +248,7 @@ Conceptually:
 Before growth:
 
 Chunk 1
+
 ┌───────────────────┐
 │ Allocation A      │
 │ Allocation B      │
@@ -255,7 +257,8 @@ Chunk 1
 
 After growth:
 
-Chunk 1              Chunk 2
+Chunk 1               Chunk 2
+
 ┌───────────────────┐ ┌───────────────────┐
 │ Allocation A      │ │ Allocation C      │
 │ Allocation B      │ │ Allocation D      │
@@ -278,6 +281,7 @@ For example:
 Before reset:
 
 Chunk 1 → Chunk 2 → Chunk 3
+
   used      used      used
 ```
 
@@ -285,6 +289,7 @@ After reset:
 
 ```text
 Chunk 1 → Chunk 2 → Chunk 3
+
   free      free      free
    ↑
 current chunk
@@ -308,11 +313,11 @@ When the arena is destroyed, PhaseAlloc walks through the chunk list and frees:
 After destruction, the arena's state is cleared.
 
 ```text
-buffer         → NULL
-capacity       → 0
-offset         → 0
-first_chunk    → NULL
-current_chunk  → NULL
+buffer          → NULL
+capacity        → 0
+offset          → 0
+first_chunk     → NULL
+current_chunk   → NULL
 ```
 
 The destroy operation is also safe to call on an already-destroyed arena.
@@ -340,6 +345,9 @@ The destroy operation is also safe to call on an already-destroyed arena.
 * Automated tests
 * Stress testing
 * Basic usage example
+* Repeatable performance benchmark suite
+* Multiple benchmark workloads
+* Write/read/checksum verification during benchmarking
 
 ---
 
@@ -348,7 +356,6 @@ The destroy operation is also safe to call on an already-destroyed arena.
 ```text
 PhaseAlloc/
 
-│
 ├── include/
 │   └── phasealloc.h
 │
@@ -368,6 +375,9 @@ PhaseAlloc/
 ├── examples/
 │   └── basic.c
 │
+├── benchmarks/
+│   └── benchmark.c
+│
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -380,6 +390,8 @@ PhaseAlloc/
 `phasealloc_internal.h` contains implementation-specific definitions for the internal chunk system.
 
 The internal header is kept separate from the public `include/` directory because users of the library do not need direct access to the chunk implementation.
+
+`benchmark.c` contains the repeatable performance benchmark suite.
 
 ---
 
@@ -456,11 +468,11 @@ Every chunk and its buffer are freed.
 After destruction:
 
 ```text
-buffer         → NULL
-capacity       → 0
-offset         → 0
-first_chunk    → NULL
-current_chunk  → NULL
+buffer          → NULL
+capacity        → 0
+offset          → 0
+first_chunk     → NULL
+current_chunk   → NULL
 ```
 
 The function safely handles:
@@ -499,7 +511,6 @@ int main(void)
     }
 
     phase_arena_reset(&arena);
-
     phase_arena_destroy(&arena);
 
     return 0;
@@ -649,7 +660,122 @@ gcc src/phasealloc.c tests/test_growth.c -Iinclude -o test_growth.exe
 .\test_growth.exe
 ```
 
-The current test suite covers the allocator's basic functionality, correctness, dynamic growth, failure handling, reset/reuse behavior, destruction behavior, and stress behavior.
+The current test suite covers:
+
+* Basic functionality
+* Correctness
+* Alignment
+* Dynamic growth
+* Failure handling
+* Overflow handling
+* Reset/reuse behavior
+* Destruction behavior
+* Stress behavior
+
+---
+
+# Performance Benchmarking
+
+PhaseAlloc includes a repeatable benchmark suite comparing its allocation strategy against standard `malloc/free`.
+
+The benchmark performs the same memory-use operations for both implementations:
+
+1. Allocate memory.
+2. Write data to the allocated memory.
+3. Read the data back.
+4. Maintain a checksum.
+5. Reclaim the memory.
+
+For `malloc/free`, each allocation is individually released with `free()`.
+
+For PhaseAlloc, allocations are reclaimed together using `phase_arena_reset()`.
+
+## Benchmark Workloads
+
+The current benchmark suite tests four workloads:
+
+| Workload | Allocations | Allocation Size |
+| -------- | ----------: | --------------: |
+| A        |     100,000 |        32 bytes |
+| B        |     100,000 |       256 bytes |
+| C        |      10,000 |            4 KB |
+| D        |       1,000 |        32 bytes |
+
+Each workload is repeated for 10 iterations.
+
+## Benchmark Results
+
+The following results are from the current benchmark run on the Windows development environment:
+
+| Workload            | `malloc/free` | PhaseAlloc | PhaseAlloc / malloc | Improvement |
+| ------------------- | ------------: | ---------: | ------------------: | ----------: |
+| A — 100,000 × 32 B  |    0.013458 s | 0.010330 s |              76.76% |  **23.24%** |
+| B — 100,000 × 256 B |    0.084244 s | 0.058819 s |              69.82% |  **30.18%** |
+| C — 10,000 × 4 KB   |    0.119481 s | 0.099230 s |              83.05% |  **16.95%** |
+| D — 1,000 × 32 B    |    0.000126 s | 0.000109 s |              86.77% |  **13.23%** |
+
+All four workloads passed checksum verification.
+
+### Interpreting the Results
+
+`PhaseAlloc / malloc` represents how much time PhaseAlloc used relative to the `malloc/free` baseline.
+
+For example:
+
+```text
+PhaseAlloc / malloc = 69.82%
+```
+
+means PhaseAlloc took 69.82% as much time as `malloc/free`.
+
+Therefore:
+
+```text
+100% - 69.82% = 30.18%
+```
+
+So PhaseAlloc used **30.18% less measured time** for that workload.
+
+The current benchmark run showed PhaseAlloc with lower measured total workload time in all four tested workloads.
+
+However, these results are specific to the tested workloads and the current Windows development environment. They do **not** establish that PhaseAlloc is universally faster than `malloc/free`.
+
+The purpose of the benchmark is to collect evidence about which workloads benefit from arena allocation rather than assuming that arena allocation is always faster.
+
+### Benchmark Limitations
+
+The current benchmark:
+
+* Uses Windows-specific `QueryPerformanceCounter` timing.
+* Tests a limited set of allocation workloads.
+* Represents synthetic allocation patterns rather than a complete real-world application.
+* Has not yet been tested across multiple operating systems.
+* Has not yet been integrated into a real JSON parsing workload.
+
+These limitations will be addressed as development continues.
+
+## Running the Benchmark
+
+From the project root:
+
+```powershell
+gcc src/phasealloc.c benchmarks/benchmark.c -Iinclude -o benchmark.exe
+```
+
+Then:
+
+```powershell
+.\benchmark.exe
+```
+
+The benchmark automatically runs all four workloads and reports:
+
+* Allocation time
+* Reclamation/reset time
+* Checksums
+* Total workload time
+* PhaseAlloc/malloc ratio
+* Relative improvement
 
 ---
 
@@ -667,6 +793,7 @@ For example, a program could have:
 
 ```text
 Phase 1
+
 ├── allocate object A
 ├── allocate object B
 ├── allocate object C
@@ -675,6 +802,7 @@ Phase 1
        reset
          ↓
 Phase 2
+
 ├── reuse memory
 ├── allocate object D
 ├── allocate object E
@@ -685,35 +813,115 @@ Dynamic growth allows a phase to exceed the arena's initial capacity without inv
 
 ---
 
-# Current Scope
+# Research Question
 
-PhaseAlloc currently provides a dynamically growing, chunk-based arena allocator.
+PhaseAlloc is being developed around the following research question:
 
-The allocator:
+> **For what types of workloads does an arena allocator actually outperform standard `malloc/free`, and why?**
 
-* Starts with an initial memory chunk.
-* Allocates sequentially within chunks.
-* Searches existing chunks when possible.
-* Creates additional chunks when necessary.
-* Uses geometric growth for new chunks.
-* Preserves existing allocations during growth.
-* Retains chunks after reset for reuse.
-* Frees all chunks when destroyed.
+The Stage 4 benchmark suite provides an initial comparison using controlled allocation workloads.
 
-Current development has focused on allocator correctness, memory safety, dynamic growth, reset/reuse behavior, failure handling, and automated testing.
+The next stage will move to a real workload:
+
+**Stage 5 — Real Workload / JSON Integration**
+
+The goal is to determine whether the performance characteristics observed in controlled benchmarks also appear in a practical application workload.
+
+---
+
+# Development Stages
+
+### Stage 1 — Basic Arena
+
+Completed:
+
+* Fixed-size arena
+* Sequential allocation
+* Reset
+* Destroy
+* Basic tests
+* Basic usage example
+
+### Stage 2 — Robustness & Correctness
+
+Completed:
+
+* Alignment
+* Edge-case handling
+* Overflow checks
+* Allocation failure handling
+* Additional correctness tests
+
+### Stage 3 — Dynamic Growth
+
+Completed:
+
+* Chunk-based architecture
+* Automatic growth
+* Geometric growth
+* Large allocation support
+* Preservation of existing allocations
+* Chunk reuse after reset
+
+### Stage 4 — Performance & Benchmarking
+
+Completed:
+
+* `malloc/free` baseline
+* PhaseAlloc comparison
+* Write/read/checksum workload
+* Multiple allocation workloads
+* Performance calculations
+* Throughput analysis
+* Repeatable benchmark suite
+
+### Stage 5 — Real Workload / JSON Integration
+
+**Next.**
+
+Planned work:
+
+* Integrate PhaseAlloc into a JSON parsing workload.
+* Compare equivalent `malloc/free` and PhaseAlloc implementations.
+* Verify correctness between implementations.
+* Benchmark repeated JSON parsing.
+* Test different JSON workload characteristics.
+* Analyze when arena allocation provides a practical advantage.
+
+### Future Stages
 
 Future development will focus on:
 
-* Performance benchmarking
-* Comparison with conventional allocation strategies
-* Allocation throughput measurements
-* Memory usage analysis
-* Realistic workloads
-* JSON parsing integration
-* Benchmarking PhaseAlloc against `malloc`/`free`
-* Additional portability improvements
 * Production-quality API improvements
-* Documentation and release preparation
+* Additional portability
+* Memory usage analysis
+* More comprehensive benchmarking
+* Real-world workload testing
+* Documentation improvements
+* Release preparation
+* Open-source publication
+* External validation
+* Potential real-world usage
+
+---
+
+# Current Status
+
+**Stage 4 — Performance & Benchmarking: Complete**
+
+PhaseAlloc currently has:
+
+* A dynamically growing chunk-based arena allocator
+* 8-byte alignment
+* Overflow and bounds checks
+* Automated correctness tests
+* Stress testing
+* Reset and reuse support
+* Safe destruction
+* A repeatable multi-workload benchmark suite
+* Measured comparisons against standard `malloc/free`
+
+The next development milestone is **Stage 5 — Real Workload / JSON Integration**.
 
 ---
 
