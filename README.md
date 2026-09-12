@@ -39,11 +39,17 @@ an arena can do:
 
 ```text
 allocate A
+
 allocate B
+
 allocate C
+
      ↓
+
    reset
+
      ↓
+
 all allocations become reusable
 ```
 
@@ -70,6 +76,7 @@ The arena also maintains:
 * `buffer` — pointer to the current chunk's memory.
 * `capacity` — capacity of the current chunk.
 * `offset` — current allocation position within the current chunk.
+* `peak_offset` — highest total amount of arena memory used during the current lifetime of the arena.
 
 ### The Offset
 
@@ -96,8 +103,8 @@ Arena
 │    Used Memory     │   Available Memory  │
 │      200 bytes     │     824 bytes       │
 └────────────────────┴─────────────────────┘
-                     ↑
-                   offset
+                    ↑
+                  offset
 ```
 
 After another 100-byte allocation:
@@ -107,10 +114,10 @@ Arena
 
 ┌──────────────────────────────┬────────────┐
 │        Used Memory           │ Available  │
-│          300 bytes           │ 724 bytes  │
+│          300 bytes           │  724 bytes │
 └──────────────────────────────┴────────────┘
-                               ↑
-                             offset
+                              ↑
+                            offset
 ```
 
 The allocator does not need to search for a free block.
@@ -128,6 +135,7 @@ When memory is requested, PhaseAlloc:
 3. Aligns the allocation to an 8-byte boundary.
 4. Returns a pointer to the available memory.
 5. Advances the chunk's offset.
+6. Updates the arena's allocation state and peak memory usage.
 
 Conceptually:
 
@@ -155,6 +163,7 @@ The basic structure is:
 
 ```text
 PhaseArena
+
 │
 ├── first_chunk
 │       │
@@ -193,18 +202,31 @@ For example:
 
 ```text
 Initial chunk
+
      64 bytes
+
         ↓
+
 New chunk
+
     128 bytes
+
         ↓
+
 New chunk
+
     256 bytes
+
         ↓
+
 New chunk
+
     512 bytes
+
         ↓
+
 New chunk
+
    1024 bytes
 ```
 
@@ -216,8 +238,10 @@ For example:
 
 ```text
 Current chunk:        64 bytes
+
 Requested allocation: 1000 bytes
-New chunk:           1000+ bytes
+
+New chunk:            1000+ bytes
 ```
 
 This allows PhaseAlloc to handle allocations larger than its original capacity.
@@ -257,12 +281,12 @@ Chunk 1
 
 After growth:
 
-Chunk 1               Chunk 2
+Chunk 1                Chunk 2
 
-┌───────────────────┐ ┌───────────────────┐
-│ Allocation A      │ │ Allocation C      │
-│ Allocation B      │ │ Allocation D      │
-└───────────────────┘ └───────────────────┘
+┌───────────────────┐  ┌───────────────────┐
+│ Allocation A      │  │ Allocation C      │
+│ Allocation B      │  │ Allocation D      │
+└───────────────────┘  └───────────────────┘
         ↑
    remains valid
 ```
@@ -282,7 +306,7 @@ Before reset:
 
 Chunk 1 → Chunk 2 → Chunk 3
 
-  used      used      used
+  used       used       used
 ```
 
 After reset:
@@ -290,7 +314,7 @@ After reset:
 ```text
 Chunk 1 → Chunk 2 → Chunk 3
 
-  free      free      free
+  free       free       free
    ↑
 current chunk
 ```
@@ -300,6 +324,8 @@ The arena returns to the first chunk and can reuse the existing memory.
 This means a reset does not require new allocations from the system.
 
 The underlying memory remains owned by the arena until `phase_arena_destroy()` is called.
+
+The `peak_offset` value tracks the highest amount of arena memory used and is useful for analyzing memory behavior during workloads.
 
 ---
 
@@ -314,9 +340,15 @@ After destruction, the arena's state is cleared.
 
 ```text
 buffer          → NULL
+
 capacity        → 0
+
 offset          → 0
+
+peak_offset     → 0
+
 first_chunk     → NULL
+
 current_chunk   → NULL
 ```
 
@@ -339,6 +371,7 @@ The destroy operation is also safe to call on an already-destroyed arena.
 * `NULL` arena safety
 * Overflow-safe growth calculations
 * Arena reset for memory reuse
+* Peak arena memory tracking
 * Repeated reset and reuse
 * Safe arena destruction
 * Safe repeated destruction
@@ -348,6 +381,13 @@ The destroy operation is also safe to call on an already-destroyed arena.
 * Repeatable performance benchmark suite
 * Multiple benchmark workloads
 * Write/read/checksum verification during benchmarking
+* Real JSON parsing workload
+* Equivalent `malloc/free` and PhaseAlloc JSON implementations
+* JSON correctness verification
+* JSON allocation instrumentation
+* JSON peak-memory measurement
+* Multiple JSON workload characteristics
+* Recursive checksum verification
 
 ---
 
@@ -361,7 +401,10 @@ PhaseAlloc/
 │
 ├── src/
 │   ├── phasealloc.c
-│   └── phasealloc_internal.h
+│   ├── phasealloc_internal.h
+│   ├── json.h
+│   ├── json.c
+│   └── json_phase.c
 │
 ├── tests/
 │   ├── test_basic.c
@@ -370,13 +413,17 @@ PhaseAlloc/
 │   ├── test_overflow.c
 │   ├── test_reset.c
 │   ├── test_destroy.c
-│   └── test_growth.c
+│   ├── test_growth.c
+│   ├── test_json.c
+│   └── test_json_phase.c
 │
 ├── examples/
-│   └── basic.c
+│   ├── basic.c
+│   └── json_phase.c
 │
 ├── benchmarks/
-│   └── benchmark.c
+│   ├── benchmark.c
+│   └── benchmark_json.c
 │
 ├── README.md
 ├── LICENSE
@@ -391,7 +438,15 @@ PhaseAlloc/
 
 The internal header is kept separate from the public `include/` directory because users of the library do not need direct access to the chunk implementation.
 
-`benchmark.c` contains the repeatable performance benchmark suite.
+`json.h` contains the JSON value structures and JSON parser API.
+
+`json.c` contains the standard `malloc/free` JSON parser.
+
+`json_phase.c` contains the equivalent JSON parser using PhaseAlloc.
+
+`benchmark.c` contains the controlled allocation performance benchmark.
+
+`benchmark_json.c` contains the real JSON workload benchmark.
 
 ---
 
@@ -471,6 +526,7 @@ After destruction:
 buffer          → NULL
 capacity        → 0
 offset          → 0
+peak_offset     → 0
 first_chunk     → NULL
 current_chunk   → NULL
 ```
@@ -521,15 +577,25 @@ The basic lifecycle is:
 
 ```text
 Create
+
   ↓
+
 Allocate
+
   ↓
+
 Use
+
   ↓
+
 Reset
+
   ↓
+
 Reuse
+
   ↓
+
 Destroy
 ```
 
@@ -537,19 +603,33 @@ If more memory is required during a phase:
 
 ```text
 Create
+
   ↓
+
 Allocate
+
   ↓
+
 Current chunk becomes full
+
   ↓
+
 Create new chunk
+
   ↓
+
 Continue allocating
+
   ↓
+
 Reset
+
   ↓
+
 Reuse existing chunks
+
   ↓
+
 Destroy
 ```
 
@@ -557,7 +637,7 @@ Destroy
 
 # Testing
 
-PhaseAlloc includes an automated test suite covering the allocator's core functionality, correctness, failure handling, dynamic growth, reset/reuse behavior, and stress behavior.
+PhaseAlloc includes an automated test suite covering the allocator's core functionality, correctness, failure handling, dynamic growth, reset/reuse behavior, stress behavior, and JSON integration.
 
 ## `test_basic.c`
 
@@ -631,6 +711,35 @@ Tests:
 * Allocation failure cases
 * Stress testing across many allocations
 
+## `test_json.c`
+
+Tests the standard `malloc/free` JSON parser for:
+
+* JSON parsing
+* Numbers
+* Strings
+* Booleans
+* Null values
+* Arrays
+* Objects
+* Nested structures
+* Correct parsed values
+
+## `test_json_phase.c`
+
+Tests the PhaseAlloc JSON parser for:
+
+* JSON parsing
+* Numbers
+* Strings
+* Booleans
+* Null values
+* Arrays
+* Objects
+* Nested structures
+* Correct parsed values
+* Arena-based allocation
+
 ---
 
 # Running the Tests
@@ -651,13 +760,18 @@ gcc src/phasealloc.c tests/test_basic.c -Iinclude -o test_basic.exe
 .\test_basic.exe
 ```
 
-The same pattern can be used for the other test files.
-
 For example:
 
 ```powershell
 gcc src/phasealloc.c tests/test_growth.c -Iinclude -o test_growth.exe
 .\test_growth.exe
+```
+
+JSON tests require the JSON parser sources:
+
+```powershell
+gcc src/phasealloc.c src/json.c src/json_phase.c tests/test_json.c -Iinclude -Isrc -o test_json.exe
+.\test_json.exe
 ```
 
 The current test suite covers:
@@ -671,14 +785,16 @@ The current test suite covers:
 * Reset/reuse behavior
 * Destruction behavior
 * Stress behavior
+* JSON parsing
+* PhaseAlloc JSON integration
 
 ---
 
 # Performance Benchmarking
 
-PhaseAlloc includes a repeatable benchmark suite comparing its allocation strategy against standard `malloc/free`.
+PhaseAlloc includes repeatable benchmark suites comparing its allocation strategy against standard `malloc/free`.
 
-The benchmark performs the same memory-use operations for both implementations:
+The controlled benchmark performs the same memory-use operations for both implementations:
 
 1. Allocate memory.
 2. Write data to the allocated memory.
@@ -692,7 +808,7 @@ For PhaseAlloc, allocations are reclaimed together using `phase_arena_reset()`.
 
 ## Benchmark Workloads
 
-The current benchmark suite tests four workloads:
+The controlled benchmark suite tests four workloads:
 
 | Workload | Allocations | Allocation Size |
 | -------- | ----------: | --------------: |
@@ -705,7 +821,7 @@ Each workload is repeated for 10 iterations.
 
 ## Benchmark Results
 
-The following results are from the current benchmark run on the Windows development environment:
+The following results are from a benchmark run on the Windows development environment:
 
 | Workload            | `malloc/free` | PhaseAlloc | PhaseAlloc / malloc | Improvement |
 | ------------------- | ------------: | ---------: | ------------------: | ----------: |
@@ -736,7 +852,7 @@ Therefore:
 
 So PhaseAlloc used **30.18% less measured time** for that workload.
 
-The current benchmark run showed PhaseAlloc with lower measured total workload time in all four tested workloads.
+The current controlled benchmark run showed PhaseAlloc with lower measured total workload time in all four tested workloads.
 
 However, these results are specific to the tested workloads and the current Windows development environment. They do **not** establish that PhaseAlloc is universally faster than `malloc/free`.
 
@@ -744,38 +860,229 @@ The purpose of the benchmark is to collect evidence about which workloads benefi
 
 ### Benchmark Limitations
 
-The current benchmark:
+The controlled benchmark:
 
-* Uses Windows-specific `QueryPerformanceCounter` timing.
+* Uses Windows-specific timing behavior.
 * Tests a limited set of allocation workloads.
 * Represents synthetic allocation patterns rather than a complete real-world application.
 * Has not yet been tested across multiple operating systems.
-* Has not yet been integrated into a real JSON parsing workload.
+* Does not directly measure memory-management behavior inside a real application.
 
-These limitations will be addressed as development continues.
+The JSON benchmark provides a second level of testing using a practical parsing workload.
 
-## Running the Benchmark
+---
 
-From the project root:
+# Real Workload Benchmark — JSON
 
-```powershell
-gcc src/phasealloc.c benchmarks/benchmark.c -Iinclude -o benchmark.exe
+Stage 5 extends the benchmark methodology to a real JSON parsing workload.
+
+The goal is to compare two equivalent implementations:
+
+```text
+JSON input
+    │
+    ├── malloc/free parser
+    │
+    └── PhaseAlloc parser
 ```
 
-Then:
+Both parsers construct equivalent JSON structures and are then processed using the same recursive checksum function.
 
-```powershell
-.\benchmark.exe
+This allows the benchmark to measure the effect of the memory-management strategy while keeping the JSON workload itself equivalent.
+
+## JSON Workloads
+
+Four JSON workloads are currently tested:
+
+| Workload              | Description                                  |
+| --------------------- | -------------------------------------------- |
+| Small JSON            | Small object containing basic values         |
+| Medium JSON           | Object containing multiple arrays and values |
+| Large Nested JSON     | Nested objects and arrays                    |
+| Allocation-Heavy JSON | JSON document containing 500 small objects   |
+
+Each workload is parsed 10,000 times.
+
+The benchmark records:
+
+* `malloc` calls
+* `realloc` calls
+* Total `malloc/realloc` operations
+* Average `malloc/realloc` operations per parse
+* PhaseAlloc allocation calls
+* Average PhaseAlloc allocations per parse
+* Peak PhaseAlloc memory per parse
+* Total parsing time
+* Relative performance
+* Recursive checksum
+
+## JSON Benchmark Results
+
+The following results are from the current benchmark run:
+
+| Workload              | Avg. malloc/realloc operations per parse | Avg. PhaseAlloc allocations per parse | Peak PhaseAlloc memory per parse | Improvement |
+| --------------------- | ---------------------------------------: | ------------------------------------: | -------------------------------: | ----------: |
+| Small JSON            |                                    22.00 |                                 16.00 |                        400 bytes |  **62.50%** |
+| Medium JSON           |                                    73.00 |                                 51.00 |                      1,767 bytes |  **58.14%** |
+| Large Nested JSON     |                                    99.00 |                                 71.00 |                      2,264 bytes |  **57.14%** |
+| Allocation-Heavy JSON |                                 6,006.00 |                              4,514.00 |                    128,328 bytes |  **64.49%** |
+
+All four workloads produced matching checksums.
+
+### JSON Timing Results
+
+```text
+Small JSON
+
+malloc/free time: 0.024000 seconds
+PhaseAlloc time:  0.009000 seconds
+Relative improvement: 62.50%
+
+
+Medium JSON
+
+malloc/free time: 0.043000 seconds
+PhaseAlloc time:  0.018000 seconds
+Relative improvement: 58.14%
+
+
+Large Nested JSON
+
+malloc/free time: 0.049000 seconds
+PhaseAlloc time: 0.021000 seconds
+Relative improvement: 57.14%
+
+
+Allocation-Heavy JSON
+
+malloc/free time: 3.177000 seconds
+PhaseAlloc time: 1.128000 seconds
+Relative improvement: 64.49%
 ```
 
-The benchmark automatically runs all four workloads and reports:
+These measurements are from one benchmark run on the development system. Exact timings and percentages can vary between runs and machines.
 
-* Allocation time
-* Reclamation/reset time
-* Checksums
-* Total workload time
-* PhaseAlloc/malloc ratio
-* Relative improvement
+### Allocation Activity
+
+The allocation-heavy workload produced:
+
+```text
+malloc/free:
+
+6,006 malloc/realloc operations per parse
+
+PhaseAlloc:
+
+4,514 PhaseAlloc allocation calls per parse
+```
+
+The allocation-heavy workload also produced the largest measured improvement in this benchmark run:
+
+```text
+64.49%
+```
+
+This workload creates many short-lived JSON objects, making it a useful test of PhaseAlloc's phase-based memory-management model.
+
+### Why PhaseAlloc Benefits This Workload
+
+The JSON parser creates many objects that belong to the same parsed document.
+
+During parsing, objects such as:
+
+```text
+JSON objects
+JSON arrays
+JSON strings
+JSON numbers
+JSON booleans
+JSON null values
+```
+
+are created and remain useful for approximately the lifetime of the parsed document.
+
+With standard `malloc/free`, these allocations are individually managed and eventually individually released.
+
+With PhaseAlloc, the allocations can remain inside the same arena and the entire collection can be reclaimed together.
+
+Conceptually:
+
+```text
+malloc/free
+
+allocate object A
+allocate object B
+allocate object C
+allocate object D
+
+       ↓
+
+free A
+free B
+free C
+free D
+```
+
+versus:
+
+```text
+PhaseAlloc
+
+allocate A
+allocate B
+allocate C
+allocate D
+
+       ↓
+
+destroy/reset arena
+
+       ↓
+
+all allocations reclaimed together
+```
+
+This matches the fundamental lifetime pattern that arena allocators are designed for.
+
+### Important Interpretation
+
+The benchmark results support the hypothesis that PhaseAlloc can provide an advantage when:
+
+* Many allocations are performed.
+* Allocations have similar lifetimes.
+* Individual objects do not need to be freed independently.
+* The workload can reclaim a group of objects together.
+* Allocation overhead is a meaningful part of the workload.
+
+The results do not show that PhaseAlloc is always faster.
+
+Instead, they provide evidence for the specific research question:
+
+> **For what types of workloads does an arena allocator actually outperform standard `malloc/free`, and why?**
+
+### Memory Measurement
+
+PhaseAlloc records `peak_offset` to measure the highest amount of arena memory used during a JSON parse.
+
+The current measurements represent the amount of memory accounted for as used by the arena across its chunks.
+
+They do **not** represent the total memory reserved from the operating system, and they are not a direct measurement of the malloc parser's peak heap usage.
+
+Therefore, the current JSON benchmark should not be used to claim that PhaseAlloc uses less memory than `malloc/free`.
+
+### Current JSON Benchmark Limitations
+
+The current JSON implementation is intentionally focused on evaluating the allocator.
+
+Some implementation details remain candidates for future improvement:
+
+* Object keys currently use the JSON string parser, which creates a temporary `JsonValue` structure.
+* Growing JSON arrays allocates new pointer storage inside the arena.
+* Previous pointer-storage allocations remain occupied because the arena does not individually free allocations.
+* The current parser is a benchmark workload rather than a complete production JSON library.
+* JSON parsing does not yet support every feature of the JSON specification.
+
+These limitations are documented rather than hidden because they provide potential areas for future allocator and workload optimization.
 
 ---
 
@@ -798,9 +1105,13 @@ Phase 1
 ├── allocate object B
 ├── allocate object C
 └── finish phase
+
          ↓
+
        reset
+
          ↓
+
 Phase 2
 
 ├── reuse memory
@@ -811,6 +1122,8 @@ Phase 2
 
 Dynamic growth allows a phase to exceed the arena's initial capacity without invalidating allocations that have already been returned.
 
+The JSON workload provides a practical example of this model because objects created while parsing a document generally share the lifetime of that document.
+
 ---
 
 # Research Question
@@ -819,13 +1132,13 @@ PhaseAlloc is being developed around the following research question:
 
 > **For what types of workloads does an arena allocator actually outperform standard `malloc/free`, and why?**
 
-The Stage 4 benchmark suite provides an initial comparison using controlled allocation workloads.
+The Stage 4 benchmark suite provides a controlled comparison using several allocation patterns.
 
-The next stage will move to a real workload:
+Stage 5 extends the investigation to a real JSON parsing workload.
 
-**Stage 5 — Real Workload / JSON Integration**
+The results from the current JSON benchmark show lower measured parsing time for PhaseAlloc across all four tested JSON workloads, with the largest improvement occurring in the allocation-heavy workload.
 
-The goal is to determine whether the performance characteristics observed in controlled benchmarks also appear in a practical application workload.
+The evidence suggests that PhaseAlloc's advantage becomes particularly relevant when a workload performs many allocations whose lifetimes are naturally grouped together.
 
 ---
 
@@ -877,51 +1190,85 @@ Completed:
 
 ### Stage 5 — Real Workload / JSON Integration
 
-**Next.**
+**Completed.**
+
+Completed work:
+
+* Integrated PhaseAlloc into a JSON parsing workload.
+* Built an equivalent `malloc/free` JSON parser.
+* Built an equivalent PhaseAlloc JSON parser.
+* Verified equivalent parsing results.
+* Added recursive checksum verification.
+* Benchmarked repeated JSON parsing.
+* Tested small JSON workloads.
+* Tested medium JSON workloads.
+* Tested large nested JSON workloads.
+* Tested allocation-heavy JSON workloads.
+* Instrumented `malloc` and `realloc` activity.
+* Instrumented PhaseAlloc allocation calls.
+* Added peak PhaseAlloc memory tracking.
+* Compared allocation activity between the two approaches.
+* Analyzed why arena allocation benefits the tested workload.
+* Documented benchmark limitations.
+
+### Stage 6 — Production-Quality Library
 
 Planned work:
 
-* Integrate PhaseAlloc into a JSON parsing workload.
-* Compare equivalent `malloc/free` and PhaseAlloc implementations.
-* Verify correctness between implementations.
-* Benchmark repeated JSON parsing.
-* Test different JSON workload characteristics.
-* Analyze when arena allocation provides a practical advantage.
+* Improve the public API
+* Review API naming and consistency
+* Improve internal organization
+* Improve error handling
+* Improve documentation
+* Review memory-safety behavior
+* Improve portability
+* Expand testing
+* Add more allocator diagnostics
+* Review performance opportunities without sacrificing correctness
 
-### Future Stages
+### Stage 7 — Open Source & External Validation
 
-Future development will focus on:
+Future work:
 
-* Production-quality API improvements
-* Additional portability
-* Memory usage analysis
-* More comprehensive benchmarking
-* Real-world workload testing
-* Documentation improvements
-* Release preparation
-* Open-source publication
-* External validation
-* Potential real-world usage
+* Prepare a polished public release
+* Improve README and documentation
+* Add usage examples
+* Add cross-platform testing
+* Publish benchmark methodology
+* Encourage external testing
+* Collect real usage feedback
+* Investigate real-world workloads
+* Potentially publish PhaseAlloc as a reusable C library
 
 ---
 
 # Current Status
 
-**Stage 4 — Performance & Benchmarking: Complete**
+**Stage 5 — Real Workload / JSON Integration: Complete**
 
 PhaseAlloc currently has:
 
 * A dynamically growing chunk-based arena allocator
 * 8-byte alignment
 * Overflow and bounds checks
+* Allocation failure handling
 * Automated correctness tests
 * Stress testing
 * Reset and reuse support
 * Safe destruction
+* Peak arena memory tracking
 * A repeatable multi-workload benchmark suite
 * Measured comparisons against standard `malloc/free`
+* A real JSON parsing workload
+* Equivalent malloc/free and PhaseAlloc JSON implementations
+* Recursive checksum verification
+* Allocation instrumentation
+* Peak PhaseAlloc memory measurement
+* Workload-specific performance analysis
 
-The next development milestone is **Stage 5 — Real Workload / JSON Integration**.
+The next development milestone is:
+
+**Stage 6 — Production-Quality Library**
 
 ---
 

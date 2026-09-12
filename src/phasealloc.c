@@ -60,6 +60,7 @@ PhaseArena phase_arena_create(size_t capacity)
     arena.buffer = first_chunk->buffer; // Set the arena's buffer to the first chunk's buffer
     arena.capacity = first_chunk->capacity; // Set the arena's capacity to the first chunk's capacity
     arena.offset = first_chunk->offset; // Set the arena's offset to the first chunk's offset
+    arena.peak_offset = 0; // Initialize peak memory usage to 0
 
     arena.first_chunk = first_chunk; // Set the first chunk of the arena
     arena.current_chunk = first_chunk; // Set the current chunk of the arena to the first chunk
@@ -106,6 +107,21 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
             arena->buffer = chunk->buffer; // Update the arena's buffer to the chunk's buffer
             arena->capacity = chunk->capacity; // Update the arena's capacity to the chunk's capacity
             arena->offset = chunk->offset; // Update the arena's offset to the chunk's offset
+
+            // Calculate total memory currently used across all chunks.
+            size_t total_used = 0;
+            PhaseChunk *used_chunk = arena->first_chunk;
+
+            while (used_chunk)
+            {
+                total_used += used_chunk->offset;
+                used_chunk = used_chunk->next;
+            }
+
+            if (total_used > arena->peak_offset)
+            {
+                arena->peak_offset = total_used; // Update peak total memory usage
+            }
 
             return memory; // Return the pointer to the allocated memory
         }
@@ -180,6 +196,21 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
     arena->capacity = new_chunk->capacity; // Update the arena's capacity to the new chunk's capacity
     arena->offset = new_chunk->offset; // Update the arena's offset to the new chunk's offset
 
+    // Calculate total memory currently used across all chunks.
+    size_t total_used = 0;
+    PhaseChunk *used_chunk = arena->first_chunk;
+
+    while (used_chunk)
+    {
+        total_used += used_chunk->offset;
+        used_chunk = used_chunk->next;
+    }
+
+    if (total_used > arena->peak_offset)
+    {
+        arena->peak_offset = total_used; // Update peak total memory usage
+    }
+
     return memory; // Return the pointer to the allocated memory in the new chunk
 }
 
@@ -224,8 +255,7 @@ void phase_arena_destroy(PhaseArena *arena)
     arena->buffer = NULL; // Reset the arena's buffer to NULL
     arena->capacity = 0; // Reset the arena's capacity to 0
     arena->offset = 0; // Reset the arena's offset to 0
+    arena->peak_offset = 0; // Reset peak memory usage
     arena->first_chunk = NULL; // Reset the arena's first chunk to NULL
     arena->current_chunk = NULL; // Reset the arena's current chunk to NULL
 }
-    
-

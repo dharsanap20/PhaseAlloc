@@ -4,7 +4,22 @@
 #include <string.h>
 #include <ctype.h>
 
-// Skip whitespace
+// Track PhaseAlloc allocation activity for benchmarking.
+static size_t phase_alloc_calls = 0;
+
+// Reset the PhaseAlloc allocation counter.
+void json_reset_phase_stats(void)
+{
+    phase_alloc_calls = 0;
+}
+
+// Return the number of PhaseAlloc allocations.
+size_t json_get_phase_alloc_calls(void)
+{
+    return phase_alloc_calls;
+}
+
+// Skip whitespace.
 static const char *skip_whitespace(const char *input)
 {
     while (isspace((unsigned char)*input))
@@ -15,19 +30,21 @@ static const char *skip_whitespace(const char *input)
     return input;
 }
 
-// Forward declaration
+// Forward declaration.
 static JsonValue *parse_value(
     const char **input,
     PhaseArena *arena
 );
 
-// Allocate a JsonValue from PhaseAlloc
+// Allocate a JsonValue from PhaseAlloc.
 static JsonValue *phase_alloc_value(PhaseArena *arena)
 {
+    phase_alloc_calls++;
+
     return phase_arena_alloc(arena, sizeof(JsonValue));
 }
 
-// Parse a JSON string
+// Parse a JSON string.
 static JsonValue *parse_string(
     const char **input,
     PhaseArena *arena
@@ -56,6 +73,8 @@ static JsonValue *parse_string(
 
     value->type = JSON_STRING;
 
+    // Allocate memory for the string itself.
+    phase_alloc_calls++;
     value->data.string = phase_arena_alloc(
         arena,
         length + 1
@@ -78,7 +97,7 @@ static JsonValue *parse_string(
     return value;
 }
 
-// Parse a JSON number
+// Parse a JSON number.
 static JsonValue *parse_number(
     const char **input,
     PhaseArena *arena
@@ -108,7 +127,7 @@ static JsonValue *parse_number(
     return value;
 }
 
-// Parse true
+// Parse true.
 static JsonValue *parse_true(
     const char **input,
     PhaseArena *arena
@@ -134,7 +153,7 @@ static JsonValue *parse_true(
     return value;
 }
 
-// Parse false
+// Parse false.
 static JsonValue *parse_false(
     const char **input,
     PhaseArena *arena
@@ -160,7 +179,7 @@ static JsonValue *parse_false(
     return value;
 }
 
-// Parse null
+// Parse null.
 static JsonValue *parse_null(
     const char **input,
     PhaseArena *arena
@@ -185,7 +204,7 @@ static JsonValue *parse_null(
     return value;
 }
 
-// Grow an array inside the arena
+// Grow an array inside the arena.
 static void **phase_array_grow(
     PhaseArena *arena,
     void **old_items,
@@ -204,6 +223,8 @@ static void **phase_array_grow(
         new_capacity = *capacity * 2;
     }
 
+    // Allocate new pointer storage inside the arena.
+    phase_alloc_calls++;
     void **new_items = phase_arena_alloc(
         arena,
         new_capacity * sizeof(void *)
@@ -224,7 +245,7 @@ static void **phase_array_grow(
     return new_items;
 }
 
-// Parse a JSON array
+// Parse a JSON array.
 static JsonValue *parse_array(
     const char **input,
     PhaseArena *arena
@@ -303,7 +324,7 @@ static JsonValue *parse_array(
     return NULL;
 }
 
-// Parse a JSON object
+// Parse a JSON object.
 static JsonValue *parse_object(
     const char **input,
     PhaseArena *arena
@@ -430,7 +451,7 @@ static JsonValue *parse_object(
     return NULL;
 }
 
-// Decide which type of JSON value to parse
+// Decide which type of JSON value to parse.
 static JsonValue *parse_value(
     const char **input,
     PhaseArena *arena
@@ -477,7 +498,7 @@ static JsonValue *parse_value(
     return NULL;
 }
 
-// Parse JSON using PhaseAlloc
+// Parse JSON using PhaseAlloc.
 JsonValue *json_parse_phase(
     const char *input,
     PhaseArena *arena

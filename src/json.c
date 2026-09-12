@@ -3,6 +3,27 @@
 #include <string.h>
 #include <ctype.h>
 
+// Track allocation activity for benchmarking.
+static size_t malloc_calls = 0;
+static size_t realloc_calls = 0;
+
+// Reset the allocation counters before a benchmark.
+void json_reset_malloc_stats(void)
+{
+    malloc_calls = 0;
+    realloc_calls = 0;
+}
+
+// Return the current allocation counts.
+void json_get_malloc_stats(
+    size_t *malloc_count,
+    size_t *realloc_count
+)
+{
+    *malloc_count = malloc_calls;
+    *realloc_count = realloc_calls;
+}
+
 static const char *skip_whitespace(const char *input)
 {
     while (isspace((unsigned char)*input))
@@ -31,6 +52,8 @@ static JsonValue *parse_string(const char **input)
 
     size_t length = *input - start;
 
+    // Allocate memory for the JSON string value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -40,6 +63,8 @@ static JsonValue *parse_string(const char **input)
 
     value->type = JSON_STRING;
 
+    // Allocate memory for the string itself.
+    malloc_calls++;
     value->data.string = malloc(length + 1);
 
     if (!value->data.string)
@@ -67,6 +92,8 @@ static JsonValue *parse_number(const char **input)
         return NULL;
     }
 
+    // Allocate memory for the JSON number value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -89,6 +116,8 @@ static JsonValue *parse_true(const char **input)
         return NULL;
     }
 
+    // Allocate memory for the JSON boolean value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -111,6 +140,8 @@ static JsonValue *parse_false(const char **input)
         return NULL;
     }
 
+    // Allocate memory for the JSON boolean value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -133,6 +164,8 @@ static JsonValue *parse_null(const char **input)
         return NULL;
     }
 
+    // Allocate memory for the JSON null value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -151,6 +184,8 @@ static JsonValue *parse_array(const char **input)
 {
     (*input)++;
 
+    // Allocate memory for the JSON array value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -180,6 +215,8 @@ static JsonValue *parse_array(const char **input)
             return NULL;
         }
 
+        // Grow the array's pointer storage.
+        realloc_calls++;
         JsonValue **new_items = realloc(
             value->data.array.items,
             (value->data.array.count + 1) * sizeof(JsonValue *)
@@ -223,6 +260,8 @@ static JsonValue *parse_object(const char **input)
 {
     (*input)++;
 
+    // Allocate memory for the JSON object value.
+    malloc_calls++;
     JsonValue *value = malloc(sizeof(JsonValue));
 
     if (!value)
@@ -262,6 +301,7 @@ static JsonValue *parse_object(const char **input)
         }
 
         char *key = key_value->data.string;
+
         free(key_value);
 
         *input = skip_whitespace(*input);
@@ -286,6 +326,8 @@ static JsonValue *parse_object(const char **input)
             return NULL;
         }
 
+        // Grow the object's key pointer storage.
+        realloc_calls++;
         char **new_keys = realloc(
             value->data.object.keys,
             (value->data.object.count + 1) * sizeof(char *)
@@ -299,6 +341,8 @@ static JsonValue *parse_object(const char **input)
             return NULL;
         }
 
+        // Grow the object's value pointer storage.
+        realloc_calls++;
         JsonValue **new_values = realloc(
             value->data.object.values,
             (value->data.object.count + 1) * sizeof(JsonValue *)

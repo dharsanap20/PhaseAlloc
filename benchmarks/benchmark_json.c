@@ -11,6 +11,72 @@ typedef struct
     const char *json;
 } JsonWorkload;
 
+static long long json_checksum(const JsonValue *value)
+{
+    if (!value)
+    {
+        return 0;
+    }
+
+    long long sum = value->type + 1;
+
+    if (value->type == JSON_NULL)
+    {
+        return sum;
+    }
+
+    if (value->type == JSON_BOOL)
+    {
+        return sum + value->data.boolean;
+    }
+
+    if (value->type == JSON_NUMBER)
+    {
+        return sum + (long long)value->data.number;
+    }
+
+    if (value->type == JSON_STRING)
+    {
+        for (const char *p = value->data.string; *p; p++)
+        {
+            sum += (unsigned char)*p;
+        }
+
+        return sum;
+    }
+
+    if (value->type == JSON_ARRAY)
+    {
+        sum += value->data.array.count;
+
+        for (size_t i = 0; i < value->data.array.count; i++)
+        {
+            sum += json_checksum(value->data.array.items[i]);
+        }
+
+        return sum;
+    }
+
+    if (value->type == JSON_OBJECT)
+    {
+        sum += value->data.object.count;
+
+        for (size_t i = 0; i < value->data.object.count; i++)
+        {
+            for (const char *p = value->data.object.keys[i]; *p; p++)
+            {
+                sum += (unsigned char)*p;
+            }
+
+            sum += json_checksum(value->data.object.values[i]);
+        }
+
+        return sum;
+    }
+
+    return sum;
+}
+
 // Run one JSON workload through both memory strategies.
 static void run_workload(const JsonWorkload *workload)
 {
@@ -21,6 +87,17 @@ static void run_workload(const JsonWorkload *workload)
 
     long long malloc_checksum = 0;
     long long phase_checksum = 0;
+
+    // Track allocation activity for this workload.
+    size_t malloc_calls;
+    size_t realloc_calls;
+    size_t phase_alloc_calls;
+
+    // Track peak PhaseAlloc memory usage.
+    size_t peak_phase_memory = 0;
+
+    // Reset malloc and realloc counters before the benchmark.
+    json_reset_malloc_stats();
 
     // Benchmark the regular malloc/free parser.
     malloc_start = clock();
@@ -36,13 +113,19 @@ static void run_workload(const JsonWorkload *workload)
         }
 
         // Read values from the parsed structure.
-        malloc_checksum += root->data.object.count;
+        malloc_checksum += json_checksum(root);
 
         // Free the JSON structure.
         json_free(root);
     }
 
     malloc_end = clock();
+
+    // Get the malloc and realloc counts after the benchmark.
+    json_get_malloc_stats(&malloc_calls, &realloc_calls);
+
+    // Reset the PhaseAlloc counter before its benchmark.
+    json_reset_phase_stats();
 
     // Benchmark the PhaseAlloc parser.
     phase_start = clock();
@@ -68,13 +151,22 @@ static void run_workload(const JsonWorkload *workload)
         }
 
         // Read the same information from the PhaseAlloc structure.
-        phase_checksum += root->data.object.count;
+        phase_checksum += json_checksum(root);
+
+        // Track the largest amount of arena memory used by one parse.
+        if (arena.peak_offset > peak_phase_memory)
+        {
+            peak_phase_memory = arena.peak_offset;
+        }
 
         // Destroy the arena and release all its memory.
         phase_arena_destroy(&arena);
     }
 
     phase_end = clock();
+
+    // Get the PhaseAlloc allocation count after the benchmark.
+    phase_alloc_calls = json_get_phase_alloc_calls();
 
     double malloc_time =
         (double)(malloc_end - malloc_start) / CLOCKS_PER_SEC;
@@ -85,12 +177,46 @@ static void run_workload(const JsonWorkload *workload)
     double ratio = phase_time / malloc_time;
     double improvement = (1.0 - ratio) * 100.0;
 
+    // Calculate total and average malloc/realloc operations.
+    size_t total_malloc_operations =
+        malloc_calls + realloc_calls;
+
+    double avg_malloc_operations =
+        (double)total_malloc_operations / ITERATIONS;
+
+    double avg_phase_allocations =
+        (double)phase_alloc_calls / ITERATIONS;
+
     printf("\n%s\n", workload->name);
     printf("------------------------------\n");
+
     printf("malloc/free time: %.6f seconds\n", malloc_time);
     printf("PhaseAlloc time:  %.6f seconds\n", phase_time);
-    printf("PhaseAlloc / malloc ratio: %.2f%%\n", ratio * 100.0);
-    printf("Relative improvement:      %.2f%%\n", improvement);
+
+    // Print allocation statistics.
+    printf("malloc calls: %zu\n", malloc_calls);
+    printf("realloc calls: %zu\n", realloc_calls);
+    printf("Total malloc/realloc operations: %zu\n",
+           total_malloc_operations);
+
+    printf("Average malloc/realloc operations per parse: %.2f\n",
+           avg_malloc_operations);
+
+    printf("PhaseAlloc allocation calls: %zu\n",
+           phase_alloc_calls);
+
+    printf("Average PhaseAlloc allocations per parse: %.2f\n",
+           avg_phase_allocations);
+
+    // Print peak memory usage.
+    printf("Peak PhaseAlloc memory per parse: %zu bytes\n",
+           peak_phase_memory);
+
+    printf("PhaseAlloc / malloc ratio: %.2f%%\n",
+           ratio * 100.0);
+
+    printf("Relative improvement:      %.2f%%\n",
+           improvement);
 
     // Verify that both parsers produced the same result.
     if (malloc_checksum == phase_checksum)

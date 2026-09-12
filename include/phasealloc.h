@@ -10,6 +10,7 @@ typedef struct
     unsigned char *buffer; // Pointer that will hold the address of the arena's memory
     size_t capacity; // Will store the total size of the arena's memory in bytes
     size_t offset; // Will store how much of the arena's memory has been used
+    size_t peak_offset; // Tracks the highest amount of memory used
 
     PhaseChunk *first_chunk; // Pointer to the first chunk in the arena
     PhaseChunk *current_chunk; // Pointer to the current chunk in the arena
