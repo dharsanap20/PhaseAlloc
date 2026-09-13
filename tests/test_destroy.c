@@ -2,89 +2,56 @@
 #include <assert.h>
 #include "../include/phasealloc.h"
 
-int main (void)
+int main(void)
 {
     printf("Running PhaseAlloc Destroy Tests...\n");
 
-    // 1. Test that destroy clears the arena buffer
+    // 1. Test that destroy safely frees an arena
     {
-        PhaseArena arena = phase_arena_create(1024);
+        PhaseArena *arena = phase_arena_create(1024);
 
-        assert(arena.buffer != NULL);
-        assert(arena.capacity == 1024);
-        assert(arena.offset == 0);
+        assert(arena != NULL);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
-        assert(arena.buffer == NULL);
-
-        printf("[PASS] Destroy clears the arena buffer.\n");
+        printf("[PASS] Arena destroyed successfully.\n");
     }
 
-    // 2. Test that destroy resets capacity and offset
+    // 2. Test that destroy works after allocations
     {
-        PhaseArena arena = phase_arena_create(1024);
+        PhaseArena *arena = phase_arena_create(1024);
 
-        assert(arena.buffer != NULL);
+        assert(arena != NULL);
 
-        void *ptr = phase_arena_alloc(&arena, 128);
+        void *ptr = phase_arena_alloc(arena, 128);
 
         assert(ptr != NULL);
-        assert(arena.offset > 0);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
-        assert(arena.buffer == NULL);
-        assert(arena.capacity == 0);
-        assert(arena.offset == 0);
-
-        printf("[PASS] Destroy resets buffer, capacity, and offset.\n");
+        printf("[PASS] Arena with allocated memory destroyed successfully.\n");
     }
 
-    // 3. Test that destroying an already destroyed arena is safe
+    // 3. Test that destroying a NULL arena is safe
     {
-        PhaseArena arena = phase_arena_create(1024);
-
-        assert(arena.buffer != NULL);
-
-        phase_arena_destroy(&arena);
-
-        assert(arena.buffer == NULL);
-
-        // Destroy again
-        phase_arena_destroy(&arena);
-
-        assert(arena.buffer == NULL);
-        assert(arena.capacity == 0);
-        assert(arena.offset == 0);
-
-        printf("[PASS] Double destroy is handled safely.\n");
-    }
-
-    // 4. test that destroying a NULL arena is safe
-    {
-        phase_arena_destroy(NULL); // Should not crash or cause undefined behavior
+        phase_arena_destroy(NULL);
 
         printf("[PASS] NULL arena destroy is handled safely.\n");
     }
 
-    // 5. Test that a new arena can be created after destruction
+    // 4. Test that a new arena can be created after destruction
     {
-        PhaseArena arena = phase_arena_create(1024);
+        PhaseArena *arena = phase_arena_create(1024);
 
-        assert(arena.buffer != NULL);
+        assert(arena != NULL);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
-        assert(arena.buffer == NULL);
+        PhaseArena *new_arena = phase_arena_create(1024);
 
-        PhaseArena new_arena = phase_arena_create(1024);
+        assert(new_arena != NULL);
 
-        assert(new_arena.buffer != NULL);
-        assert(new_arena.capacity == 1024);
-        assert(new_arena.offset == 0);
-
-        phase_arena_destroy(&new_arena);
+        phase_arena_destroy(new_arena);
 
         printf("[PASS] New arena can be created after destruction.\n");
     }

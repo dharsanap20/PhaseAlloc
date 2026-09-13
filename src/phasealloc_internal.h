@@ -3,15 +3,29 @@
 
 #include <stddef.h>
 
-struct PhaseChunk 
+typedef struct PhaseChunk PhaseChunk;
+
+struct PhaseChunk
 {
-    unsigned char *buffer; // Pointer to the chunk's memory buffer
-    size_t capacity; // Total size of the chunk's memory in bytes
-    size_t offset; // Amount of memory used in the chunk
-    
-    struct PhaseChunk *next; 
+    unsigned char *buffer;
+    size_t capacity;
+    size_t offset;
+
+    PhaseChunk *next;
 };
 
-struct PhaseChunk *phase_chunk_create(size_t capacity); // Function to create a PhaseChunk with a requested capacity
+struct PhaseArena
+{
+    unsigned char *buffer;
+    size_t capacity;
+    size_t offset;
+    size_t peak_offset;
+
+    PhaseChunk *first_chunk;
+    PhaseChunk *current_chunk;
+};
+
+PhaseChunk *phase_chunk_create(size_t capacity);
+PhaseChunk *phase_chunk_create_next(PhaseChunk *current_chunk, size_t capacity);
 
 #endif // PHASEALLOC_INTERNAL_H

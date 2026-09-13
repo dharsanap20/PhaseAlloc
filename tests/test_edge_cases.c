@@ -8,56 +8,54 @@ int main(void)
 
     // 1. Zero-byte allocation
     {
-        PhaseArena arena = phase_arena_create(1024);
+        PhaseArena *arena = phase_arena_create(1024);
 
-        void *ptr = phase_arena_alloc(&arena, 0);
+        void *ptr = phase_arena_alloc(arena, 0);
 
         assert(ptr == NULL);
-        assert(arena.offset == 0);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
         printf("[PASS] Zero-byte allocation handled correctly.\n");
     }
 
     // 2. Out-of-memory allocation
     {
-        PhaseArena arena = phase_arena_create(64);
+        PhaseArena *arena = phase_arena_create(64);
 
-        void *ptr = phase_arena_alloc(&arena, 128); 
+        void *ptr = phase_arena_alloc(arena, 128);
 
         assert(ptr != NULL);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
         printf("[PASS] Allocation larger than current chunk handled correctly.\n");
     }
 
     // 3. Exact-capacity allocation
     {
-        PhaseArena arena = phase_arena_create(64);
+        PhaseArena *arena = phase_arena_create(64);
 
-        void *ptr = phase_arena_alloc(&arena, 64); // Request exactly the available memory
+        void *ptr = phase_arena_alloc(arena, 64);
 
         assert(ptr != NULL);
-        assert(arena.offset == 64);
 
-        void *next_ptr = phase_arena_alloc(&arena, 1); 
+        void *next_ptr = phase_arena_alloc(arena, 1);
 
         assert(next_ptr != NULL);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
         printf("[PASS] Exact-capacity allocation followed by growth handled correctly.\n");
     }
 
     // 4. Multiple allocations
     {
-        PhaseArena arena = phase_arena_create(128);
+        PhaseArena *arena = phase_arena_create(128);
 
-        void *first = phase_arena_alloc(&arena, 16);
-        void *second = phase_arena_alloc(&arena, 32);
-        void *third = phase_arena_alloc(&arena, 64);
+        void *first = phase_arena_alloc(arena, 16);
+        void *second = phase_arena_alloc(arena, 32);
+        void *third = phase_arena_alloc(arena, 64);
 
         assert(first != NULL);
         assert(second != NULL);
@@ -67,7 +65,7 @@ int main(void)
         assert(second != third);
         assert(first != third);
 
-        phase_arena_destroy(&arena);
+        phase_arena_destroy(arena);
 
         printf("[PASS] Multiple allocations handled correctly.\n");
     }

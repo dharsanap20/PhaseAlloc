@@ -15,13 +15,13 @@ int main(void)
         "}";
 
     // Create an arena that the JSON parser will use for its allocations.
-    PhaseArena arena = phase_arena_create(4096);
+    PhaseArena *arena = phase_arena_create(4096);
 
     // Make sure the arena was created successfully.
-    assert(arena.buffer != NULL);
+    assert(arena != NULL);
 
     // Parse the JSON using PhaseAlloc.
-    JsonValue *root = json_parse_phase(json, &arena);
+    JsonValue *root = json_parse_phase(json, arena);
 
     // Make sure parsing succeeded and produced a JSON object.
     assert(root != NULL);
@@ -48,7 +48,7 @@ int main(void)
     printf("PhaseAlloc JSON test passed.\n");
 
     // Free the entire arena and everything allocated inside it.
-    phase_arena_destroy(&arena);
+    phase_arena_destroy(arena);
 
     return 0;
 }
