@@ -1,5 +1,17 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdio.h>
+
+#include <stdio.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <time.h>
+#endif
+
 #include "../src/json.h"
 #include "../include/phasealloc.h"
 
@@ -7,9 +19,47 @@
 
 typedef struct
 {
+#ifdef _WIN32
+    LARGE_INTEGER start;
+    LARGE_INTEGER end;
+    LARGE_INTEGER frequency;
+#else
+    struct timespec start;
+    struct timespec end;
+#endif
+} Timer;
+
+typedef struct
+{
     const char *name;
     const char *json;
 } JsonWorkload;
+
+static void timer_start(Timer *timer)
+{
+#ifdef _WIN32
+    QueryPerformanceFrequency(&timer->frequency);
+    QueryPerformanceCounter(&timer->start);
+#else
+    clock_gettime(CLOCK_MONOTONIC, &timer->start);
+#endif
+}
+
+static double timer_stop(Timer *timer)
+{
+#ifdef _WIN32
+    QueryPerformanceCounter(&timer->end);
+
+    return (double)(timer->end.QuadPart - timer->start.QuadPart)
+         / (double)(timer->frequency.QuadPart);
+#else
+    clock_gettime(CLOCK_MONOTONIC, &timer->end);
+
+    return (double)(timer->end.tv_sec - timer->start.tv_sec)
+         + (double)(timer->end.tv_nsec - timer->start.tv_nsec)
+           / 1000000000.0;
+#endif
+}
 
 static long long json_checksum(const JsonValue *value)
 {
@@ -80,10 +130,8 @@ static long long json_checksum(const JsonValue *value)
 // Run one JSON workload through both memory strategies.
 static void run_workload(const JsonWorkload *workload)
 {
-    clock_t malloc_start;
-    clock_t malloc_end;
-    clock_t phase_start;
-    clock_t phase_end;
+    Timer malloc_timer;
+    Timer phase_timer;
 
     long long malloc_checksum = 0;
     long long phase_checksum = 0;
@@ -98,7 +146,7 @@ static void run_workload(const JsonWorkload *workload)
     json_reset_malloc_stats();
 
     // Benchmark the regular malloc/free parser.
-    malloc_start = clock();
+    timer_start(&malloc_timer);
 
     for (int i = 0; i < ITERATIONS; i++)
     {
@@ -117,7 +165,7 @@ static void run_workload(const JsonWorkload *workload)
         json_free(root);
     }
 
-    malloc_end = clock();
+    double malloc_time = timer_stop(&malloc_timer);
 
     // Get the malloc and realloc counts after the benchmark.
     json_get_malloc_stats(&malloc_calls, &realloc_calls);
@@ -126,7 +174,7 @@ static void run_workload(const JsonWorkload *workload)
     json_reset_phase_stats();
 
     // Benchmark the PhaseAlloc parser.
-    phase_start = clock();
+    timer_start(&phase_timer);
 
     for (int i = 0; i < ITERATIONS; i++)
     {
@@ -163,16 +211,10 @@ static void run_workload(const JsonWorkload *workload)
         phase_arena_destroy(arena);
     }
 
-    phase_end = clock();
+    double phase_time = timer_stop(&phase_timer);
 
     // Get the PhaseAlloc allocation count after the benchmark.
     phase_alloc_calls = json_get_phase_alloc_calls();
-
-    double malloc_time =
-        (double)(malloc_end - malloc_start) / CLOCKS_PER_SEC;
-
-    double phase_time =
-        (double)(phase_end - phase_start) / CLOCKS_PER_SEC;
 
     double ratio = phase_time / malloc_time;
     double improvement = (1.0 - ratio) * 100.0;

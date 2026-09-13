@@ -1,15 +1,32 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include <stdio.h>
+
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <time.h>
+#endif
+
 #include "../include/phasealloc.h"
 
 #define ITERATIONS 10
 
 typedef struct
 {
+#ifdef _WIN32
     LARGE_INTEGER start;
     LARGE_INTEGER end;
     LARGE_INTEGER frequency;
+#else
+    struct timespec start;
+    struct timespec end;
+#endif
 } Timer;
 
 typedef struct
@@ -21,16 +38,27 @@ typedef struct
 
 void timer_start(Timer *timer)
 {
+#ifdef _WIN32
     QueryPerformanceFrequency(&timer->frequency);
     QueryPerformanceCounter(&timer->start);
+#else
+    clock_gettime(CLOCK_MONOTONIC, &timer->start);
+#endif
 }
 
 double timer_stop(Timer *timer)
 {
+#ifdef _WIN32
     QueryPerformanceCounter(&timer->end);
 
     return (double)(timer->end.QuadPart - timer->start.QuadPart)
          / (double)(timer->frequency.QuadPart);
+#else
+    clock_gettime(CLOCK_MONOTONIC, &timer->end);
+
+    return (double)(timer->end.tv_sec - timer->start.tv_sec)
+         + (double)(timer->end.tv_nsec - timer->start.tv_nsec) / 1000000000.0;
+#endif
 }
 
 void run_workload(Workload workload)
