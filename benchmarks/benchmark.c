@@ -124,13 +124,14 @@ void run_workload(Workload workload)
      * PhaseAlloc benchmark
      */
 
-    PhaseArena arena = phase_arena_create(
+    // Create a PhaseAlloc arena for the workload.
+    PhaseArena *arena = phase_arena_create(
         workload.allocation_count *
         workload.allocation_size *
         2
     );
 
-    if (arena.buffer == NULL)
+    if (arena == NULL)
     {
         printf("Failed to create PhaseAlloc arena.\n");
         free(pointers);
@@ -144,7 +145,7 @@ void run_workload(Workload workload)
         for (int i = 0; i < workload.allocation_count; i++)
         {
             void *memory = phase_arena_alloc(
-                &arena,
+                arena,
                 workload.allocation_size
             );
 
@@ -156,7 +157,7 @@ void run_workload(Workload workload)
                     i
                 );
 
-                phase_arena_destroy(&arena);
+                phase_arena_destroy(arena);
                 free(pointers);
                 return;
             }
@@ -179,7 +180,7 @@ void run_workload(Workload workload)
 
         timer_start(&timer);
 
-        phase_arena_reset(&arena);
+        phase_arena_reset(arena);
 
         double phase_reset_time = timer_stop(&timer);
         total_phase_reset_time += phase_reset_time;
@@ -282,7 +283,7 @@ void run_workload(Workload workload)
         improvement
     );
 
-    phase_arena_destroy(&arena);
+    phase_arena_destroy(arena);
     free(pointers);
 }
 
