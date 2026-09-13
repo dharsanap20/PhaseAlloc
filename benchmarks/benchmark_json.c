@@ -92,6 +92,7 @@ static void run_workload(const JsonWorkload *workload)
     size_t malloc_calls;
     size_t realloc_calls;
     size_t phase_alloc_calls;
+    size_t peak_phase_memory = 0;
 
     // Reset malloc and realloc counters before the benchmark.
     json_reset_malloc_stats();
@@ -150,6 +151,14 @@ static void run_workload(const JsonWorkload *workload)
         // Read the same information from the PhaseAlloc structure.
         phase_checksum += json_checksum(root);
 
+        // Track the highest arena memory usage seen during the workload.
+        size_t peak_memory = phase_arena_get_peak_memory(arena);
+
+        if (peak_memory > peak_phase_memory)
+        {
+            peak_phase_memory = peak_memory;
+        }
+
         // Destroy the arena and release all its memory.
         phase_arena_destroy(arena);
     }
@@ -198,6 +207,9 @@ static void run_workload(const JsonWorkload *workload)
 
     printf("Average PhaseAlloc allocations per parse: %.2f\n",
            avg_phase_allocations);
+
+    printf("Peak PhaseAlloc memory per parse: %zu bytes\n",
+           peak_phase_memory);
 
     printf("PhaseAlloc / malloc ratio: %.2f%%\n",
            ratio * 100.0);

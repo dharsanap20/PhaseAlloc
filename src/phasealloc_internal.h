@@ -16,9 +16,7 @@ struct PhaseChunk
 
 struct PhaseArena
 {
-    unsigned char *buffer;
-    size_t capacity;
-    size_t offset;
+    size_t current_used;
     size_t peak_offset;
 
     PhaseChunk *first_chunk;

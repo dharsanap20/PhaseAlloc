@@ -5,6 +5,11 @@
 
 struct PhaseChunk *phase_chunk_create(size_t capacity)
 {
+    if (capacity == 0)
+    {
+        return NULL; // Return NULL if the requested capacity is zero
+    }
+
     struct PhaseChunk *chunk = malloc(sizeof(struct PhaseChunk)); // Allocate memory for a new PhaseChunk structure
 
     if (!chunk)
@@ -46,8 +51,56 @@ struct PhaseChunk *phase_chunk_create_next(struct PhaseChunk *current_chunk, siz
     return new_chunk; // Return the new chunk
 }
 
+static void *phase_chunk_alloc(PhaseChunk *chunk, size_t size)
+{
+    if (!chunk || size == 0)
+    {
+        return NULL; // Return NULL if the chunk is invalid or size is zero
+    }
+
+    if (chunk->offset > chunk->capacity)
+    {
+        return NULL; // Return NULL if the offset exceeds the chunk capacity
+    }
+
+    uintptr_t current_address =
+        (uintptr_t)(chunk->buffer + chunk->offset);
+
+    uintptr_t remainder = current_address % 8; // Calculate alignment remainder
+
+    size_t padding = 0;
+
+    if (remainder != 0)
+    {
+        padding = 8 - remainder; // Calculate required padding
+    }
+
+    if (padding > chunk->capacity - chunk->offset)
+    {
+        return NULL; // Return NULL if there is not enough space for alignment
+    }
+
+    if (size > chunk->capacity - chunk->offset - padding)
+    {
+        return NULL; // Return NULL if there is not enough space for the allocation
+    }
+
+    chunk->offset += padding; // Apply alignment padding
+
+    void *memory = chunk->buffer + chunk->offset; // Get allocated memory address
+
+    chunk->offset += size; // Increase used memory
+
+    return memory;
+}
+
 PhaseArena *phase_arena_create(size_t capacity)
 {
+    if (capacity == 0)
+    {
+        return NULL; // Return NULL if the requested capacity is zero
+    }
+
     // Allocate the PhaseArena structure internally.
     PhaseArena *arena = malloc(sizeof(PhaseArena));
 
@@ -66,9 +119,7 @@ PhaseArena *phase_arena_create(size_t capacity)
         return NULL;
     }
 
-    arena->buffer = first_chunk->buffer;
-    arena->capacity = first_chunk->capacity;
-    arena->offset = first_chunk->offset;
+    arena->current_used = 0;
     arena->peak_offset = 0;
 
     arena->first_chunk = first_chunk;
@@ -88,50 +139,22 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
 
     while (chunk)
     {
-        if (chunk->offset > chunk->capacity)
+        size_t old_offset = chunk->offset;
+
+        void *memory = phase_chunk_alloc(chunk, size);
+
+        if (memory)
         {
-            return NULL; // Return NULL if the offset exceeds the chunk capacity
-        }
+            size_t bytes_used = chunk->offset - old_offset;
 
-        uintptr_t current_address = (uintptr_t)(chunk->buffer + chunk->offset);
+            arena->current_used += bytes_used;
 
-        uintptr_t remainder = current_address % 8; // Calculate alignment remainder
-
-        size_t padding = 0;
-
-        if (remainder != 0)
-        {
-            padding = 8 - remainder; // Calculate required padding
-        }
-
-        if (padding <= chunk->capacity - chunk->offset &&
-            size <= chunk->capacity - chunk->offset - padding)
-        {
-            chunk->offset += padding; // Apply alignment padding
-
-            void *memory = chunk->buffer + chunk->offset; // Get allocated memory address
-
-            chunk->offset += size; // Increase used memory
+            if (arena->current_used > arena->peak_offset)
+            {
+                arena->peak_offset = arena->current_used;
+            }
 
             arena->current_chunk = chunk;
-            arena->buffer = chunk->buffer;
-            arena->capacity = chunk->capacity;
-            arena->offset = chunk->offset;
-
-            // Calculate total memory currently used across all chunks.
-            size_t total_used = 0;
-            PhaseChunk *used_chunk = arena->first_chunk;
-
-            while (used_chunk)
-            {
-                total_used += used_chunk->offset;
-                used_chunk = used_chunk->next;
-            }
-
-            if (total_used > arena->peak_offset)
-            {
-                arena->peak_offset = total_used;
-            }
 
             return memory;
         }
@@ -177,53 +200,30 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
         return NULL; // Return NULL if the new chunk cannot be created
     }
 
-    uintptr_t new_address = (uintptr_t)new_chunk->buffer;
+    size_t old_offset = new_chunk->offset;
 
-    uintptr_t new_remainder = new_address % 8; // Calculate alignment remainder
+    void *memory = phase_chunk_alloc(new_chunk, size);
 
-    size_t new_padding = 0;
-
-    if (new_remainder != 0)
+    if (!memory)
     {
-        new_padding = 8 - new_remainder;
+        // Remove the unused chunk if its allocation unexpectedly fails.
+        chunk->next = NULL;
+        free(new_chunk->buffer);
+        free(new_chunk);
+
+        return NULL; // Return NULL if the new chunk cannot satisfy the allocation
     }
 
-    if (new_padding > new_chunk->capacity)
+    size_t bytes_used = new_chunk->offset - old_offset;
+
+    arena->current_used += bytes_used;
+
+    if (arena->current_used > arena->peak_offset)
     {
-        return NULL;
+        arena->peak_offset = arena->current_used;
     }
-
-    if (size > new_chunk->capacity - new_padding)
-    {
-        return NULL;
-    }
-
-    new_chunk->offset += new_padding; // Apply alignment padding
-
-    void *memory =
-        new_chunk->buffer + new_chunk->offset; // Get allocated memory address
-
-    new_chunk->offset += size; // Increase used memory
 
     arena->current_chunk = new_chunk;
-    arena->buffer = new_chunk->buffer;
-    arena->capacity = new_chunk->capacity;
-    arena->offset = new_chunk->offset;
-
-    // Calculate total memory currently used across all chunks.
-    size_t total_used = 0;
-    PhaseChunk *used_chunk = arena->first_chunk;
-
-    while (used_chunk)
-    {
-        total_used += used_chunk->offset;
-        used_chunk = used_chunk->next;
-    }
-
-    if (total_used > arena->peak_offset)
-    {
-        arena->peak_offset = total_used;
-    }
 
     return memory;
 }
@@ -243,10 +243,18 @@ void phase_arena_reset(PhaseArena *arena)
         chunk = chunk->next;
     }
 
+    arena->current_used = 0;
     arena->current_chunk = arena->first_chunk;
-    arena->buffer = arena->first_chunk->buffer;
-    arena->capacity = arena->first_chunk->capacity;
-    arena->offset = 0;
+}
+
+size_t phase_arena_get_peak_memory(const PhaseArena *arena)
+{
+    if (!arena)
+    {
+        return 0;
+    }
+
+    return arena->peak_offset;
 }
 
 void phase_arena_destroy(PhaseArena *arena)
