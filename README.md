@@ -23,9 +23,9 @@ PhaseArena
     │
     ▼
 ┌────────────────────────────────────────┐
-│                Chunk 1                  │
+│               Chunk 1                  │
 │                                        │
-│ [ Allocation A ][ Allocation B ][ free │
+│ [ Allocation A ][ Allocation B ][ free│
 │                                  space ]│
 │                              ▲         │
 │                            offset      │
@@ -122,8 +122,8 @@ Before reset:
 ```text
 ┌────────────────────────────────────────┐
 │ [ A ][ B ][ C ][ D ][   free space   ]│
-│                         ▲             │
-│                       offset          │
+│                              ▲         │
+│                            offset      │
 └────────────────────────────────────────┘
 ```
 
@@ -131,7 +131,7 @@ After reset:
 
 ```text
 ┌────────────────────────────────────────┐
-│ [              reusable space        ]│
+│ [            reusable space          ]│
 │  ▲                                     │
 │ offset = 0                             │
 └────────────────────────────────────────┘
@@ -191,8 +191,11 @@ Safe to call with `NULL`.
 
 ```c
 size_t phase_arena_get_current_memory(const PhaseArena *arena);
+
 size_t phase_arena_get_peak_memory(const PhaseArena *arena);
+
 size_t phase_arena_get_allocation_count(const PhaseArena *arena);
+
 size_t phase_arena_get_chunk_count(const PhaseArena *arena);
 ```
 
@@ -234,7 +237,6 @@ int main(void)
     }
 
     phase_arena_reset(arena);
-
     phase_arena_destroy(arena);
 
     return 0;
@@ -270,8 +272,8 @@ Two equivalent parsers are benchmarked:
                      │
               ┌──────┴──────┐
               ▼             ▼
-         malloc/free    PhaseAlloc
-           parser          parser
+        malloc/free     PhaseAlloc
+          parser           parser
               │             │
               └──────┬──────┘
                      ▼
@@ -337,17 +339,38 @@ The goal is to determine **when** arena allocation provides an advantage rather 
 
 The benchmark uses 10,000 iterations per workload and measures both performance and allocation behavior.
 
+The benchmark timer uses:
+
+* Windows `QueryPerformanceCounter`
+* POSIX `clock_gettime(CLOCK_MONOTONIC)`
+
 Exact timings vary between machines and runs, so results are treated as measurements of specific experiments rather than universal performance claims.
 
 ---
 
 ## Building and Testing
 
-PhaseAlloc uses a `Makefile` for repeatable builds and tests.
+### Requirements
 
-With MinGW on Windows:
+PhaseAlloc requires:
+
+* A C11-compatible C compiler
+* `make`-compatible build tooling
+
+The project is compiled with:
+
+```text
+-Wall -Wextra -std=c11
+```
+
+### Windows with MinGW
+
+The current `Makefile` provides the complete build, test, and benchmark workflow for MinGW on Windows.
+
+Run the full test suite:
 
 ```powershell
+mingw32-make clean
 mingw32-make test
 ```
 
@@ -391,11 +414,7 @@ The test suite covers:
 * PhaseAlloc JSON parsing
 * Stress growth behavior
 
-The project is compiled with:
-
-```text
--Wall -Wextra -std=c11
-```
+The repository's benchmark implementation includes platform-specific timer support, but the current `Makefile` is configured for the Windows/MinGW workflow.
 
 ---
 
@@ -403,6 +422,7 @@ The project is compiled with:
 
 ```text
 PhaseAlloc/
+
 ├── include/
 │   └── phasealloc.h
 │
@@ -483,6 +503,7 @@ PhaseAlloc currently provides:
 * Real JSON workload integration
 * Allocation instrumentation
 * Recursive checksum verification
+* Platform-specific benchmark timing
 
 ---
 
@@ -507,6 +528,8 @@ The JSON implementation also contains areas for future optimization, including t
 Peak PhaseAlloc memory represents memory accounted for as used by the arena. It is not a direct measurement of total operating-system memory consumption.
 
 Benchmark results depend on the workload, compiler, operating system, hardware, and system state.
+
+Cross-platform benchmark support has been implemented at the timer level, but independent testing on additional operating systems and toolchains remains part of the external-validation process.
 
 ---
 
@@ -544,9 +567,9 @@ Equivalent `malloc/free` and PhaseAlloc JSON parsers, allocation instrumentation
 
 ### Stage 6 — Production-Quality Library
 
-**In Progress**
+**Complete**
 
-The allocator has been refactored around an opaque API and now includes:
+The allocator has been refactored around an opaque API and includes:
 
 * API contracts
 * Internal encapsulation
@@ -559,9 +582,16 @@ The allocator has been refactored around an opaque API and now includes:
 
 ### Stage 7 — Open Source & External Validation
 
-**Planned**
+**In Progress**
 
-Future work includes cross-platform testing, public release preparation, external validation, additional real workloads, and feedback from external users.
+Current work includes:
+
+* Final public-repository cleanup
+* Public release preparation
+* Cross-platform benchmark support
+* External validation
+* Additional real-world workload evaluation
+* Feedback from external users
 
 ---
 
