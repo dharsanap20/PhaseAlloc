@@ -18,6 +18,8 @@ struct PhaseArena
 {
     size_t current_used;
     size_t peak_offset;
+    size_t allocation_count;
+    size_t chunk_count;
 
     PhaseChunk *first_chunk;
     PhaseChunk *current_chunk;

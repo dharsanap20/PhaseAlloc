@@ -63,16 +63,22 @@ static void *phase_chunk_alloc(PhaseChunk *chunk, size_t size)
         return NULL; // Return NULL if the offset exceeds the chunk capacity
     }
 
+    /*
+     * malloc returns memory suitably aligned for any standard C type.
+     * Use the same general alignment requirement for allocations made
+     * inside the chunk.
+     */
+    size_t alignment = _Alignof(max_align_t);
+
     uintptr_t current_address =
         (uintptr_t)(chunk->buffer + chunk->offset);
 
-    uintptr_t remainder = current_address % 8; // Calculate alignment remainder
-
+    size_t remainder = current_address % alignment;
     size_t padding = 0;
 
     if (remainder != 0)
     {
-        padding = 8 - remainder; // Calculate required padding
+        padding = alignment - remainder; // Calculate required alignment padding
     }
 
     if (padding > chunk->capacity - chunk->offset)
@@ -121,6 +127,8 @@ PhaseArena *phase_arena_create(size_t capacity)
 
     arena->current_used = 0;
     arena->peak_offset = 0;
+    arena->allocation_count = 0;
+    arena->chunk_count = 1;
 
     arena->first_chunk = first_chunk;
     arena->current_chunk = first_chunk;
@@ -154,6 +162,7 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
                 arena->peak_offset = arena->current_used;
             }
 
+            arena->allocation_count++;
             arena->current_chunk = chunk;
 
             return memory;
@@ -223,6 +232,8 @@ void *phase_arena_alloc(PhaseArena *arena, size_t size)
         arena->peak_offset = arena->current_used;
     }
 
+    arena->allocation_count++;
+    arena->chunk_count++;
     arena->current_chunk = new_chunk;
 
     return memory;
@@ -247,6 +258,16 @@ void phase_arena_reset(PhaseArena *arena)
     arena->current_chunk = arena->first_chunk;
 }
 
+size_t phase_arena_get_current_memory(const PhaseArena *arena)
+{
+    if (!arena)
+    {
+        return 0;
+    }
+
+    return arena->current_used;
+}
+
 size_t phase_arena_get_peak_memory(const PhaseArena *arena)
 {
     if (!arena)
@@ -255,6 +276,26 @@ size_t phase_arena_get_peak_memory(const PhaseArena *arena)
     }
 
     return arena->peak_offset;
+}
+
+size_t phase_arena_get_allocation_count(const PhaseArena *arena)
+{
+    if (!arena)
+    {
+        return 0;
+    }
+
+    return arena->allocation_count;
+}
+
+size_t phase_arena_get_chunk_count(const PhaseArena *arena)
+{
+    if (!arena)
+    {
+        return 0;
+    }
+
+    return arena->chunk_count;
 }
 
 void phase_arena_destroy(PhaseArena *arena)

@@ -1,6 +1,7 @@
-#include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
 #include "../include/phasealloc.h"
 
 int main(void)
@@ -9,26 +10,30 @@ int main(void)
 
     assert(arena != NULL);
 
-    // Test allocations of different sizes
-    void *first = phase_arena_alloc(arena, 1);
-    void *second = phase_arena_alloc(arena, 5);
-    void *third = phase_arena_alloc(arena, 13);
-    void *fourth = phase_arena_alloc(arena, 32);
+    size_t alignment = _Alignof(max_align_t);
 
-    assert(first != NULL);
-    assert(second != NULL);
-    assert(third != NULL);
-    assert(fourth != NULL);
+    // Test allocations of different sizes.
+    for (size_t size = 1; size <= 64; size++)
+    {
+        void *memory = phase_arena_alloc(arena, size);
 
-    // Check that every returned address is 8-byte aligned
-    assert((uintptr_t)first % 8 == 0);
-    assert((uintptr_t)second % 8 == 0);
-    assert((uintptr_t)third % 8 == 0);
-    assert((uintptr_t)fourth % 8 == 0);
+        assert(memory != NULL);
+        assert((uintptr_t)memory % alignment == 0);
+    }
 
-    printf("[PASS] All allocations are 8-byte aligned.\n");
+    // Test many allocations to exercise alignment across the arena.
+    for (int i = 0; i < 100; i++)
+    {
+        void *memory = phase_arena_alloc(arena, sizeof(double));
+
+        assert(memory != NULL);
+        assert((uintptr_t)memory % alignment == 0);
+    }
 
     phase_arena_destroy(arena);
+
+    printf("[PASS] All allocations are aligned to max_align_t.\n");
+    printf("Alignment requirement: %zu bytes\n", alignment);
 
     printf("\nAll Alignment tests passed!\n");
 
